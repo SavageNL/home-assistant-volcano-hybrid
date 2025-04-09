@@ -80,10 +80,10 @@ class VolcanoSwitchEntity(CoordinatorEntity, SwitchEntity):
         self._attr_available = self.coordinator.data.available
         super()._handle_coordinator_update()
 
-    async def async_turn_on(self, **kwargs):
+    async def async_turn_on(self, **kwargs: any) -> None:
         """Turn the entity on."""
         await getattr(self.coordinator, "set_" + self._key)(True)
 
-    async def async_turn_off(self, **kwargs):
+    async def async_turn_off(self, **kwargs: any) -> None:
         """Turn the entity off."""
         await getattr(self.coordinator, "set_" + self._key)(False)
