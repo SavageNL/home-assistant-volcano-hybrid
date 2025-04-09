@@ -11,10 +11,10 @@ if [[ ! -d "${PWD}/config" ]]; then
 fi
 
 # Set the path to custom_components
-## This let's us have the structure we want <root>/custom_components/integration_blueprint
+## This let's us have the structure we want <root>/custom_components/volcano_hybrid
 ## while at the same time have Home Assistant configuration inside <root>/config
 ## without resulting to symlinks.
-export PYTHONPATH="${PYTHONPATH}:${PWD}/custom_components"
+export PYTHONPATH="${PYTHONPATH}:${PWD}/volcano_hybrid"
 
 # Start Home Assistant
 hass --config "${PWD}/config" --debug
