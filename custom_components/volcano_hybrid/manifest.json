@@ -1,7 +1,6 @@
 {
   "domain": "volcano_hybrid",
   "name": "Volcano Hybrid",
-  "version": "0.1.0",
   "bluetooth": [{
     "manufacturer_id": 1736
   }],
@@ -9,8 +8,9 @@
   "config_flow": true,
   "dependencies": ["bluetooth_adapters"],
   "documentation": "https://github.com/SavageNL/home-assistant-volcano-hybrid",
-  "issue_tracker": "https://github.com/SavageNL/home-assistant-volcano-hybrid/issues",
   "iot_class": "local_push",
+  "issue_tracker": "https://github.com/SavageNL/home-assistant-volcano-hybrid/issues",
   "loggers": ["volcano_hybrid"],
-  "requirements": ["bleak>=0.20.2"]
+  "requirements": ["bleak>=0.20.2"],
+  "version": "0.1.0"
 }

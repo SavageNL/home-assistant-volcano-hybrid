@@ -1,9 +1,9 @@
 """Volcano Hybrid BLE communication module."""
 
 import asyncio
+import logging
 from collections.abc import Callable
 from enum import StrEnum
-import logging
 from typing import Any
 
 from bleak import BleakClient, BleakError, BLEDevice
@@ -30,14 +30,16 @@ class VolcanoSensor(StrEnum):
     VIBRATION = "vibration"
 
 
+STORZ_BICKEL_MANUFACTURER_ID = 1736
+
 # BLE service and characteristic placeholders
 SERVICE_UUID = "10110000-5354-4f52-5a26-4249434b454c"
-CHARACTERISTIC_CURRENT_TEMP = "10110001-5354-4f52-5a26-4249434b454c" # 4
-CHARACTERISTIC_SET_TEMP = "10110003-5354-4f52-5a26-4249434b454c" # 4
-CHARACTERISTIC_FAN_ON = "10110013-5354-4f52-5a26-4249434b454c" # 4
-CHARACTERISTIC_FAN_OFF = "10110014-5354-4f52-5a26-4249434b454c" # 4
-CHARACTERISTIC_HEATER_ON = "1011000f-5354-4f52-5a26-4249434b454c" # 4
-CHARACTERISTIC_HEATER_OFF = "10110010-5354-4f52-5a26-4249434b454c" # 4
+CHARACTERISTIC_CURRENT_TEMP = "10110001-5354-4f52-5a26-4249434b454c"  # 4
+CHARACTERISTIC_SET_TEMP = "10110003-5354-4f52-5a26-4249434b454c"  # 4
+CHARACTERISTIC_FAN_ON = "10110013-5354-4f52-5a26-4249434b454c"  # 4
+CHARACTERISTIC_FAN_OFF = "10110014-5354-4f52-5a26-4249434b454c"  # 4
+CHARACTERISTIC_HEATER_ON = "1011000f-5354-4f52-5a26-4249434b454c"  # 4
+CHARACTERISTIC_HEATER_OFF = "10110010-5354-4f52-5a26-4249434b454c"  # 4
 
 CHARACTERISTIC_CURRENT_AUTO_OFF_TIME = "1011000c-5354-4f52-5a26-4249434b454c"  # 4
 CHARACTERISTIC_HEAT_HOURS_CHANGED = "10110015-5354-4f52-5a26-4249434b454c"  # 4
@@ -103,17 +105,17 @@ class VolcanoHybridData:
         self.vibration: bool = False
 
     @property
-    def heat_time(self):
+    def heat_time(self) -> int:
         """Get the current auto off time in minutes."""
         return self.heat_hours_changed * 60 + self.heat_minutes_changed
 
     @property
-    def current_auto_off_time(self):
+    def current_auto_off_time(self) -> int:
         """Get the current auto off time in minutes."""
         return self._current_auto_off_time if self._current_auto_off_time > 0 else None
 
     @current_auto_off_time.setter
-    def current_auto_off_time(self, value):
+    def current_auto_off_time(self, value: int) -> None:
         self._current_auto_off_time = value
 
     def get(self, key: str) -> Any:
@@ -140,14 +142,14 @@ class VolcanoBLE:
 
     def is_supported(self, service_info: BluetoothServiceInfoBleak) -> bool:
         """Check if the device is supported."""
-        return 1736 in service_info.manufacturer_id
+        return STORZ_BICKEL_MANUFACTURER_ID in service_info.manufacturer_id
 
     async def async_update_from_device(self, device: BLEDevice) -> VolcanoHybridData:
         """Trigger an update of the Volcano device data."""
         if device and device != self.device:
             await self.async_disconnect()
             self.device = device
-        # This will update when not connected yet, otherwise nothing will be done but data will
+        # This will update when not connected yet
         await self._ensure_client_connected()
         return self.data
 
@@ -164,9 +166,9 @@ class VolcanoBLE:
                 _LOGGER.debug("Connecting to BLE device at %s", self.device.address)
                 await self.client.connect()
                 self._after_data_updated()
-                await self._async_read_and_subscribe_all(True)
-        except BleakError as ex:
-            _LOGGER.error("Failed to connect to BLE device: %s", ex)
+                await self._async_read_and_subscribe_all(initial=True)
+        except BleakError:
+            _LOGGER.exception("Failed to connect to BLE device")
             await self.async_disconnect()
             return False
         return True
@@ -178,7 +180,9 @@ class VolcanoBLE:
         self._after_data_updated()
 
     @retry_bluetooth_connection_error()
-    async def _async_read_and_subscribe_all(self, initial=False) -> VolcanoHybridData:
+    async def _async_read_and_subscribe_all(
+        self, initial: bool = False
+    ) -> VolcanoHybridData:
         """Read all required characteristics from the BLE device."""
         try:
 
@@ -218,8 +222,8 @@ class VolcanoBLE:
             if initial:
                 await self._async_read_initial_characteristics()
             self.data.available = True
-        except BleakError as ex:
-            _LOGGER.error("Error reading characteristics: %s", ex)
+        except BleakError:
+            _LOGGER.exception("Error reading characteristics")
         return self.data
 
     async def _async_read_initial_characteristics(self) -> None:
@@ -273,64 +277,67 @@ class VolcanoBLE:
 
         await asyncio.gather(
             self._async_read_and_subscribe(
-                SERVICE3_UUID, CHARACTERISTIC_SERIAL_NUMBER, _parse_serial_number, False
+                SERVICE3_UUID,
+                CHARACTERISTIC_SERIAL_NUMBER,
+                _parse_serial_number,
+                subscribe=False,
             ),
             self._async_read_and_subscribe(
                 SERVICE3_UUID,
                 CHARACTERISTIC_FIRMWARE_VERSION,
                 _parse_firmware_version,
-                False,
+                subscribe=False,
             ),
             self._async_read_and_subscribe(
                 SERVICE3_UUID,
                 CHARACTERISTIC_FIRMWARE_BLE_VERSION,
                 _parse_firmware_ble_version,
-                False,
+                subscribe=False,
             ),
             self._async_read_and_subscribe(
                 SERVICE3_UUID,
                 CHARACTERISTIC_BOOTLOADER_VERSION,
                 _parse_bootloader_version,
-                False,
+                subscribe=False,
             ),
             self._async_read_and_subscribe(
-                SERVICE3_UUID, CHARACTERISTIC_FIRMWARE, _parse_firmware, False
+                SERVICE3_UUID, CHARACTERISTIC_FIRMWARE, _parse_firmware, subscribe=False
             ),
             self._async_read_and_subscribe(
-                SERVICE3_UUID, CHARACTERISTIC_PRJ2V, _parse_prj2v, True
+                SERVICE3_UUID, CHARACTERISTIC_PRJ2V, _parse_prj2v, subscribe=True
             ),
             self._async_read_and_subscribe(
-                SERVICE3_UUID, CHARACTERISTIC_PRJ3V, _parse_prj3v, True
+                SERVICE3_UUID, CHARACTERISTIC_PRJ3V, _parse_prj3v, subscribe=True
             ),
             self._async_read_and_subscribe(
                 SERVICE_UUID,
                 CHARACTERISTIC_CURRENT_AUTO_OFF_TIME,
                 _parse_current_auto_off_time,
-                True,
+                subscribe=True,
             ),
             self._async_read_and_subscribe(
                 SERVICE_UUID,
                 CHARACTERISTIC_HEAT_HOURS_CHANGED,
                 _parse_heat_hours_changed,
-                True,
+                subscribe=True,
             ),
             self._async_read_and_subscribe(
                 SERVICE_UUID,
                 CHARACTERISTIC_HEAT_MINUTES_CHANGED,
                 _parse_heat_minutes_changed,
-                True,
+                subscribe=True,
             ),
             self._async_read_and_subscribe(
                 SERVICE_UUID,
                 CHARACTERISTIC_SHUT_OFF,
                 _parse_shut_off,
-                False,
+                subscribe=False,
             ),
             self._async_read_and_subscribe(
                 SERVICE_UUID,
                 CHARACTERISTIC_LED_BRIGHTNESS,
                 _parse_led_brightness,
-                False,
+                subscribe=False,
             ),
         )
         _LOGGER.debug("Initial characteristics read complete")
@@ -439,8 +446,8 @@ class VolcanoBLE:
         self,
         service: str,
         characteristic: str,
-        valueChangeCallback: Callable[[bytearray], None],
-        subscribe: bool,
+        value_change_callback: Callable[[bytearray], None],
+        *subscribe: bool,
     ) -> None:
         """Read a characteristic from the BLE device."""
         if not await self._ensure_client_connected():
@@ -450,9 +457,9 @@ class VolcanoBLE:
         char = service.get_characteristic(characteristic)
         if subscribe:
             await self.client.start_notify(
-                char, lambda _, data: valueChangeCallback(data)
+                char, lambda _, data: value_change_callback(data)
             )
-        valueChangeCallback(await self.client.read_gatt_char(char))
+        value_change_callback(await self.client.read_gatt_char(char))
 
     async def _write_gatt(
         self,

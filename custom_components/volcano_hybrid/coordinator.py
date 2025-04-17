@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import logging
+from datetime import timedelta
 
 from habluetooth import BluetoothScanningMode
-
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth.match import BluetoothCallbackMatcher
 from homeassistant.config_entries import ConfigEntry
@@ -48,7 +47,7 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
         self._device = VolcanoBLE(self.async_update_listeners, self.update_device)
         self.address = address
 
-    async def _async_setup(self):
+    async def _async_setup(self) -> None:
         """Connect as soon as possible."""
         self.config_entry.async_on_unload(
             bluetooth.async_register_callback(
@@ -81,7 +80,7 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
             hw_version=self.data.bootloader_version,
         )
 
-    async def set_fan(self, on: bool) -> None:
+    async def set_fan(self, *, on: bool) -> None:
         """Set the fan on or off."""
         await self._device.async_set_fan(on)
 

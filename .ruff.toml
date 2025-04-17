@@ -14,6 +14,13 @@ ignore = [
     "D212", # multi-line-summary-first-line (incompatible with formatter)
     "COM812", # incompatible with formatter
     "ISC001", # incompatible with formatter
+    "TC001",
+    "TC002",
+    "FBT001", # Setters with just a single boolean should be clear
+    "FBT002",
+    "FBT003",
+    "ARG001", # Indicates that required positional arguments are not used
+    "ARG002", # Same for kwargs
 ]
 
 [lint.flake8-pytest-style]

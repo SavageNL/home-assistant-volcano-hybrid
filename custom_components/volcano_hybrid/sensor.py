@@ -73,7 +73,7 @@ class VolcanoSensorEntity(CoordinatorEntity, SensorEntity):
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        newValue = self.coordinator.data.get(self._key)
-        self._attr_native_value = newValue
+        new_value = self.coordinator.data.get(self._key)
+        self._attr_native_value = new_value
         self._attr_available = self.coordinator.data.available
         super()._handle_coordinator_update()
