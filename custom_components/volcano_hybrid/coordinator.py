@@ -80,7 +80,7 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
             hw_version=self.data.bootloader_version,
         )
 
-    async def set_fan(self, *, on: bool) -> None:
+    async def set_fan(self, on: bool) -> None:
         """Set the fan on or off."""
         await self._device.async_set_fan(on)
 
