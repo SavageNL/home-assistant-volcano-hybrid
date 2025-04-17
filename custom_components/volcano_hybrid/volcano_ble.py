@@ -1,4 +1,5 @@
 """Volcano Hybrid BLE communication module."""
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -24,7 +25,7 @@ class VolcanoSensor(StrEnum):
     LED_BRIGHTNESS = "led_brightness"
     AUTO_SHUTDOWN = "auto_shutdown"
     PRV1_ERROR = "prv1_error"
-    SHOWING_CELCIUS = "showing_celcius"
+    SHOWING_CELSIUS = "showing_celsius"
     DISPLAY_ON_COOLING = "display_on_cooling"
     PRV2_ERROR = "prv2_error"
     VIBRATION = "vibration"
@@ -136,7 +137,7 @@ class VolcanoBLE:
         """Initialize VolcanoBLE."""
         self._after_data_updated = data_updated
         self._after_device_updated = device_updated
-        self.client: BleakClient = None
+        self.client: BleakClient | None = None
         self.device = device
         self.data = VolcanoHybridData()
 
@@ -187,11 +188,11 @@ class VolcanoBLE:
         try:
 
             def _read_current_temp(data: bytearray) -> None:
-                self.data.current_temp = int.from_bytes(data, "little") / 10
+                self.data.current_temp = int(int.from_bytes(data, "little") / 10)
                 self._after_data_updated()
 
             def _read_set_temp(data: bytearray) -> None:
-                self.data.set_temp = int.from_bytes(data, "little") / 10
+                self.data.set_temp = int(int.from_bytes(data, "little") / 10)
                 self._after_data_updated()
 
             def _read_prj1v(data: bytearray) -> None:
@@ -273,7 +274,7 @@ class VolcanoBLE:
             self._after_data_updated()
 
         def _parse_shut_off(data: bytearray) -> None:
-            self.data.shut_off = int.from_bytes(data, "little") / 60
+            self.data.shut_off = int(int.from_bytes(data, "little") / 60)
 
         def _parse_led_brightness(data: bytearray) -> None:
             self.data.led_brightness = int.from_bytes(data, "little")
@@ -374,9 +375,9 @@ class VolcanoBLE:
         await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_SET_TEMP,
-            int.to_bytes(int(target * 10), 2, "little"),
+            bytearray(int.to_bytes(int(target * 10), 2, "little")),
         )
-        self.data.set_temp = target
+        self.data.set_temp = int(target)
         self._after_data_updated()
 
     async def async_set_showing_celcius(self, on: bool) -> None:
@@ -400,7 +401,7 @@ class VolcanoBLE:
         await self._write_gatt(
             SERVICE3_UUID,
             CHARACTERISTIC_PRJ2V,
-            int.to_bytes(mask, 4, "little"),
+            bytearray(int.to_bytes(mask, 4, "little")),
         )
 
     async def async_set_vibration(self, on: bool) -> None:
@@ -415,7 +416,7 @@ class VolcanoBLE:
         await self._write_gatt(
             SERVICE3_UUID,
             CHARACTERISTIC_PRJ3V,
-            int.to_bytes(mask, 4, "little"),
+            bytearray(int.to_bytes(mask, 4, "little")),
         )
 
     async def async_set_shut_off(self, minutes: int) -> None:
@@ -423,7 +424,7 @@ class VolcanoBLE:
         await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_SHUT_OFF,
-            int.to_bytes(minutes * 60, 2, "little"),
+            bytearray(int.to_bytes(minutes * 60, 2, "little")),
         )
         self.data.shut_off = minutes
         self._after_data_updated()
@@ -433,7 +434,7 @@ class VolcanoBLE:
         await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_LED_BRIGHTNESS,
-            int.to_bytes(brightness, 2, "little"),
+            bytearray(int.to_bytes(brightness, 2, "little")),
         )
         self.data.led_brightness = brightness
         self._after_data_updated()

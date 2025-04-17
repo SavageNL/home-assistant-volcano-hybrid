@@ -10,15 +10,15 @@ from homeassistant.components.switch import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import VolcanoHybridCoordinator
 from .volcano_ble import VolcanoSensor
 
 SENSOR_DESCRIPTIONS: dict[str, SwitchEntityDescription] = {
-    VolcanoSensor.SHOWING_CELCIUS: SwitchEntityDescription(
-        key=VolcanoSensor.SHOWING_CELCIUS,
+    VolcanoSensor.SHOWING_CELSIUS: SwitchEntityDescription(
+        key=VolcanoSensor.SHOWING_CELSIUS,
         name="Showing celcius",
         icon="mdi:temperature-celsius",
         device_class=SwitchDeviceClass.SWITCH,
@@ -46,13 +46,13 @@ SENSOR_DESCRIPTIONS: dict[str, SwitchEntityDescription] = {
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Volcano BLE sensors."""
     coordinator: VolcanoHybridCoordinator = entry.runtime_data
     async_add_entities(
         [
-            VolcanoSwitchEntity(coordinator, VolcanoSensor.SHOWING_CELCIUS),
+            VolcanoSwitchEntity(coordinator, VolcanoSensor.SHOWING_CELSIUS),
             VolcanoSwitchEntity(coordinator, VolcanoSensor.DISPLAY_ON_COOLING),
             VolcanoSwitchEntity(coordinator, VolcanoSensor.VIBRATION),
         ]

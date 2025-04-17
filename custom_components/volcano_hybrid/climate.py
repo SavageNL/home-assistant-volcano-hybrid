@@ -50,7 +50,7 @@ class VolcanyHybridClimate(CoordinatorEntity, ClimateEntity):
         self._attr_device_info = coordinator.device_info
 
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
-        self._attr_hvac_modes = ["off", "heat"]
+        self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
         self._attr_fan_modes = ["off", "on"]
         self._attr_swing_modes = []
         self._attr_min_temp = 40

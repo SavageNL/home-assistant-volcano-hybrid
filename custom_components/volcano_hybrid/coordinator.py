@@ -6,7 +6,9 @@ import logging
 from datetime import timedelta
 
 from habluetooth import BluetoothScanningMode
+from habluetooth.models import BluetoothServiceInfoBleak
 from homeassistant.components import bluetooth
+from homeassistant.components.bluetooth import BluetoothChange
 from homeassistant.components.bluetooth.match import BluetoothCallbackMatcher
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -49,10 +51,13 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
 
     async def _async_setup(self) -> None:
         """Connect as soon as possible."""
+        def callback(_: BluetoothServiceInfoBleak, __: BluetoothChange):
+            self.hass.async_create_task(self._async_update_data())
+
         self.config_entry.async_on_unload(
             bluetooth.async_register_callback(
                 self.hass,
-                lambda _, __: self.hass.async_create_task(self._async_update_data()),
+                callback,
                 BluetoothCallbackMatcher(connectable=True, address=self.address),
                 BluetoothScanningMode.ACTIVE,
             )

@@ -11,7 +11,7 @@ from homeassistant.components.number import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import VolcanoHybridCoordinator
@@ -24,15 +24,11 @@ SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
         icon="mdi:timer-stop-outline",
         device_class=NumberDeviceClass.DURATION,
         entity_category=EntityCategory.CONFIG,
-        max_value=360,
-        min_value=0,
         mode=NumberMode.BOX,
         native_max_value=360,
         native_min_value=0,
         native_step=30,
         native_unit_of_measurement=UnitOfTime.MINUTES,
-        step=30,
-        unit_of_measurement=UnitOfTime.MINUTES,
         entity_registry_enabled_default=False,
     ),
     VolcanoSensor.LED_BRIGHTNESS: NumberEntityDescription(
@@ -40,14 +36,11 @@ SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
         name="LED Brightness",
         icon="mdi:brightness-5",
         entity_category=EntityCategory.CONFIG,
-        max_value=100,
-        min_value=0,
         mode=NumberMode.SLIDER,
         native_max_value=100,
         native_min_value=0,
         native_step=1,
         native_unit_of_measurement=PERCENTAGE,
-        step=1,
         unit_of_measurement=PERCENTAGE,
         entity_registry_enabled_default=False,
     ),
@@ -57,7 +50,7 @@ SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Volcano BLE sensors."""
     coordinator: VolcanoHybridCoordinator = entry.runtime_data
