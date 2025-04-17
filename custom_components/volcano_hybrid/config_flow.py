@@ -63,9 +63,12 @@ class VolcanoHybridConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data={"address": self._discovered_device.address},
             )
 
+        self._set_confirm_only()
+        placeholders = {"name": self._discovered_device.name}
+        self.context["title_placeholders"] = placeholders
         return self.async_show_form(
             step_id="bluetooth_confirm",
-            description_placeholders={"name": self._discovered_device.name},
+            description_placeholders=placeholders,
         )
 
     def _build_schema(self, devices: list) -> Any:
