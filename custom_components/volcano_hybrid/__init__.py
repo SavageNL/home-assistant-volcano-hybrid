@@ -5,7 +5,7 @@ from homeassistant.core import HomeAssistant
 
 from .coordinator import VolcanoHybridCoordinator
 
-PLATFORMS = ["binary_sensor", "climate", "number", "sensor", "switch"]
+PLATFORMS = ["binary_sensor", "button", "climate", "number", "sensor", "switch"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

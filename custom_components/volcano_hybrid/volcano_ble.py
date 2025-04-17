@@ -30,6 +30,7 @@ class VolcanoSensor(StrEnum):
     DISPLAY_ON_COOLING = "display_on_cooling"
     PRV2_ERROR = "prv2_error"
     VIBRATION = "vibration"
+    RECONNECT = "reconnect"
 
 
 STORZ_BICKEL_MANUFACTURER_ID = 1736
@@ -180,8 +181,8 @@ class VolcanoBLE:
                 await self.client.connect()
                 self._after_data_updated()
                 await self._async_read_and_subscribe_all()
-        except BleakError:
-            _LOGGER.exception("Failed to connect to BLE device")
+        except BleakError as err:
+            _LOGGER.debug("Failed to connect to BLE device: %s", err)
             await self.async_disconnect()
             return False
         return True

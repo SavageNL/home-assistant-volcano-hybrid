@@ -121,3 +121,8 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
     async def set_led_brightness(self, brightness: float) -> None:
         """Set the LED brightness."""
         await self._device.async_set_led_brightness(int(brightness))
+
+    async def reconnect(self):
+        """Attempt to reconnect."""
+        await self._device.async_disconnect()
+        await self._async_update_data()
