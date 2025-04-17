@@ -23,6 +23,7 @@ SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
         icon="mdi:power",
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
+        has_entity_name=True,
     ),
     VolcanoSensor.PRV1_ERROR: BinarySensorEntityDescription(
         key=VolcanoSensor.PRV1_ERROR,
@@ -30,6 +31,7 @@ SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
         entity_category=EntityCategory.DIAGNOSTIC,
         device_class=BinarySensorDeviceClass.PROBLEM,
         entity_registry_enabled_default=False,
+        has_entity_name=True,
     ),
     VolcanoSensor.PRV2_ERROR: BinarySensorEntityDescription(
         key=VolcanoSensor.PRV2_ERROR,
@@ -37,6 +39,7 @@ SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
         entity_category=EntityCategory.DIAGNOSTIC,
         device_class=BinarySensorDeviceClass.PROBLEM,
         entity_registry_enabled_default=False,
+        has_entity_name=True,
     ),
 }
 

@@ -41,7 +41,7 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
 
         self.device_info = DeviceInfo(
             identifiers={(DOMAIN, address)},
-            name="Volcano Hybrid BLE",
+            name="Volcano Hybrid",
             manufacturer="Storz & Bickel",
             model="Volcano Hybrid",
             connections={(CONNECTION_BLUETOOTH, address)},

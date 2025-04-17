@@ -30,6 +30,7 @@ SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
         native_step=30,
         native_unit_of_measurement=UnitOfTime.MINUTES,
         entity_registry_enabled_default=False,
+        has_entity_name=True,
     ),
     VolcanoSensor.LED_BRIGHTNESS: NumberEntityDescription(
         key=VolcanoSensor.LED_BRIGHTNESS,
@@ -41,8 +42,8 @@ SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
         native_min_value=0,
         native_step=1,
         native_unit_of_measurement=PERCENTAGE,
-        unit_of_measurement=PERCENTAGE,
         entity_registry_enabled_default=False,
+        has_entity_name=True,
     ),
 }
 

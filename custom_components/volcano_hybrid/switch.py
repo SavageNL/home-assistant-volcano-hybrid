@@ -24,6 +24,7 @@ SENSOR_DESCRIPTIONS: dict[str, SwitchEntityDescription] = {
         device_class=SwitchDeviceClass.SWITCH,
         entity_category=EntityCategory.CONFIG,
         entity_registry_enabled_default=False,
+        has_entity_name=True,
     ),
     VolcanoSensor.DISPLAY_ON_COOLING: SwitchEntityDescription(
         key=VolcanoSensor.DISPLAY_ON_COOLING,
@@ -31,6 +32,7 @@ SENSOR_DESCRIPTIONS: dict[str, SwitchEntityDescription] = {
         device_class=SwitchDeviceClass.SWITCH,
         entity_category=EntityCategory.CONFIG,
         entity_registry_enabled_default=False,
+        has_entity_name=True,
     ),
     VolcanoSensor.VIBRATION: SwitchEntityDescription(
         key=VolcanoSensor.VIBRATION,
@@ -39,6 +41,7 @@ SENSOR_DESCRIPTIONS: dict[str, SwitchEntityDescription] = {
         device_class=SwitchDeviceClass.SWITCH,
         entity_category=EntityCategory.CONFIG,
         entity_registry_enabled_default=False,
+        has_entity_name=True,
     ),
 }
 

@@ -25,6 +25,7 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTime.MINUTES,
+        has_entity_name=True,
     ),
     VolcanoSensor.CURRENT_ON_TIME: SensorEntityDescription(
         key=VolcanoSensor.CURRENT_ON_TIME,
@@ -34,6 +35,7 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTime.MINUTES,
         entity_registry_enabled_default=False,
+        has_entity_name=True,
     ),
     VolcanoSensor.HEAT_TIME: SensorEntityDescription(
         key=VolcanoSensor.HEAT_TIME,
@@ -45,6 +47,7 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         suggested_unit_of_measurement=UnitOfTime.HOURS,
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
+        has_entity_name=True,
     ),
 }
 

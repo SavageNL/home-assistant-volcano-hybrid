@@ -18,7 +18,8 @@ from .volcano_ble import VolcanoSensor
 SENSOR_DESCRIPTIONS: dict[str, ClimateEntityDescription] = {
     VolcanoSensor.VOLCANO: ClimateEntityDescription(
         key=VolcanoSensor.VOLCANO,
-        name="Volcano Hybrid",
+        name=None,
+        has_entity_name=True,
     ),
 }
 
