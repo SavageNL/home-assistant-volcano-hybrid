@@ -20,6 +20,7 @@ class VolcanoSensor(StrEnum):
 
     VOLCANO = "volcano"
     CURRENT_AUTO_OFF_TIME = "current_auto_off_time"
+    CURRENT_ON_TIME = "current_on_time"
     HEAT_TIME = "heat_time"
     SHUT_OFF = "shut_off"
     LED_BRIGHTNESS = "led_brightness"
@@ -111,9 +112,17 @@ class VolcanoHybridData:
         return self.heat_hours_changed * 60 + self.heat_minutes_changed
 
     @property
-    def current_auto_off_time(self) -> int:
+    def current_auto_off_time(self) -> int | None:
         """Get the current auto off time in minutes."""
         return self._current_auto_off_time if self._current_auto_off_time > 0 else None
+
+    @property
+    def current_on_time(self) -> int:
+        """Get the current auto off time in minutes."""
+        off_time = self.current_auto_off_time
+        return (
+            None if off_time is None else self.shut_off - off_time
+        )
 
     @current_auto_off_time.setter
     def current_auto_off_time(self, value: int) -> None:

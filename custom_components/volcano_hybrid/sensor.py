@@ -26,6 +26,15 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTime.MINUTES,
     ),
+    VolcanoSensor.CURRENT_ON_TIME: SensorEntityDescription(
+        key=VolcanoSensor.CURRENT_ON_TIME,
+        name="Current on time",
+        icon="mdi:timer",
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        entity_registry_enabled_default=False,
+    ),
     VolcanoSensor.HEAT_TIME: SensorEntityDescription(
         key=VolcanoSensor.HEAT_TIME,
         name="Total heat time",
@@ -51,6 +60,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             VolcanoSensorEntity(coordinator, VolcanoSensor.CURRENT_AUTO_OFF_TIME),
+            VolcanoSensorEntity(coordinator, VolcanoSensor.CURRENT_ON_TIME),
             VolcanoSensorEntity(coordinator, VolcanoSensor.HEAT_TIME),
         ]
     )
