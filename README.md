@@ -42,3 +42,206 @@ This integration will connect to the Volcano as soon as it finds one (after it h
 This means that updates from the device will trigger updates in Home Assistant instantly, but also that no other bluetooth devices will be able to control the Volcano.
 
 I'm planning to make that configurable at some point.
+
+# Example usage
+
+## Dashboard grid with shut-off timer and current states
+
+![Climate entity](resources/tile_widget.png)
+
+```yaml
+type: grid
+cards:
+  - type: heading
+    heading: Volcano Hybrid
+    heading_style: title
+    icon: mdi:volcano-outline
+    badges:
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.volcano_hybrid_auto_off_time
+  - type: thermostat
+    entity: climate.volcano_hybrid
+    features:
+      - style: icons
+        type: climate-hvac-modes
+      - style: icons
+        type: climate-fan-modes
+    show_current_as_primary: true
+    name: " "
+```
+
+## Easy temperature setting
+
+![Climate entity](resources/set_temperature.png)
+
+Uses [Button Card](https://github.com/custom-cards/button-card)
+
+```yaml
+type: grid
+cards:
+  - type: heading
+    heading: Temperature
+    heading_style: title
+    icon: mdi:temperature-celsius
+    badges:
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.volcano_target_temp
+        state_content:
+          - last_changed
+          - state
+  - type: custom:button-card
+    name: 179
+    tap_action:
+      action: call-service
+      service: climate.set_temperature
+      data:
+        hvac_mode: heat
+        temperature: 179
+      target:
+        entity_id: climate.volcano_hybrid
+  - type: custom:button-card
+    name: 185
+    tap_action:
+      action: call-service
+      service: climate.set_temperature
+      data:
+        hvac_mode: heat
+        temperature: 185
+      target:
+        entity_id: climate.volcano_hybrid
+  - type: custom:button-card
+    name: 191
+    tap_action:
+      action: call-service
+      service: climate.set_temperature
+      data:
+        hvac_mode: heat
+        temperature: 191
+      target:
+        entity_id: climate.volcano_hybrid
+  - type: custom:button-card
+    name: 199
+    tap_action:
+      action: call-service
+      service: climate.set_temperature
+      data:
+        hvac_mode: heat
+        temperature: 199
+      target:
+        entity_id: climate.volcano_hybrid
+  - type: custom:button-card
+    name: 209
+    tap_action:
+      action: call-service
+      service: climate.set_temperature
+      data:
+        hvac_mode: heat
+        temperature: 209
+      target:
+        entity_id: climate.volcano_hybrid
+  - type: tile
+    entity: automation.volcano_progress
+    features_position: bottom
+    vertical: false
+    name: Volcano auto temp
+    grid_options:
+      columns: full
+    tap_action:
+      action: toggle
+```
+
+## Automatically progress temperature over time
+
+This is an example automation that will automatically increase the temperature in 5-minute intervals.
+Follows the [Vapesuvius temp guide](https://www.reddit.com/user/Vapesuvius/comments/zuwcs7/vapesuvius_unofficial_storz_bickel_temp_guide_2nd/)
+
+```yaml
+alias: Volcano progress
+description: ""
+triggers:
+  - trigger: numeric_state
+    entity_id:
+      - sensor.volcano_hybrid_current_on_time
+    above: 0
+    below: 5
+    id: "179"
+    alias: 0-5 => 179
+  - trigger: numeric_state
+    entity_id:
+      - sensor.volcano_hybrid_current_on_time
+    above: 5
+    below: 10
+    id: "185"
+    alias: 5-10 => 185
+  - trigger: numeric_state
+    entity_id:
+      - sensor.volcano_hybrid_current_on_time
+    above: 10
+    below: 15
+    id: "191"
+    alias: 10-15 => 191
+  - trigger: numeric_state
+    entity_id:
+      - sensor.volcano_hybrid_current_on_time
+    above: 15
+    below: 20
+    id: "199"
+    alias: 15-20 => 100
+  - trigger: numeric_state
+    entity_id:
+      - sensor.volcano_hybrid_current_on_time
+    above: 20
+    id: "205"
+    alias: 20-25 => 205
+conditions: []
+actions:
+  - action: climate.set_temperature
+    metadata: {}
+    data:
+      temperature: "{{ trigger.id  }}"
+    target:
+      entity_id: climate.volcano_hybrid
+mode: single
+```
+
+### Increase/decrease temperature by Vapesuvius' temp guide steps
+
+I use these, combined with a dimmer switch.
+
+- Long press on: Turn on heating
+- Long press off: Turn off heating
+- Short press on: Turn on fan
+- Short press off: Turn off fan
+- Up: Increase temperature using these actions
+- Down: Decrease temperature using these actions
+
+```yaml
+  - action: climate.set_temperature
+    metadata: {}
+    data:
+      temperature: >
+        {%set temp = state_attr('climate.volcano_hybrid', 'temperature')%}
+        {%if temp < 179 %}179{%elif temp < 185 %}185{%elif temp < 191
+        %}191{%elif temp < 199 %}199{%else %}205{%endif%}
+    target:
+      entity_id:
+        - climate.volcano_hybrid
+    alias: Inc temp
+
+
+  - action: climate.set_temperature
+    metadata: {}
+    data:
+      temperature: >
+        {%set temp = state_attr('climate.volcano_hybrid', 'temperature')%}
+        {%if temp > 205 %}205{%elif temp > 199 %}199{%elif temp > 191
+        %}191{%elif temp > 185 %}185{%else %}179{%endif%}
+    target:
+      entity_id:
+        - climate.volcano_hybrid
+    alias: Dec temp
+```
