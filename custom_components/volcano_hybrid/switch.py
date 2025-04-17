@@ -19,7 +19,7 @@ from .volcano_ble import VolcanoSensor
 SENSOR_DESCRIPTIONS: dict[str, SwitchEntityDescription] = {
     VolcanoSensor.SHOWING_CELSIUS: SwitchEntityDescription(
         key=VolcanoSensor.SHOWING_CELSIUS,
-        name="Showing celcius",
+        name="Showing celsius",
         icon="mdi:temperature-celsius",
         device_class=SwitchDeviceClass.SWITCH,
         entity_category=EntityCategory.CONFIG,

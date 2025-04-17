@@ -97,9 +97,9 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
         """Set the target temperature."""
         await self._device.async_set_target_temperature(target)
 
-    async def set_showing_celcius(self, on: bool) -> None:
+    async def set_showing_celsius(self, on: bool) -> None:
         """Set the toggle for showing Celsius."""
-        await self._device.async_set_showing_celcius(on)
+        await self._device.async_set_showing_celsius(on)
 
     async def set_display_on_cooling(self, on: bool) -> None:
         """Set the toggle for display on cooling."""

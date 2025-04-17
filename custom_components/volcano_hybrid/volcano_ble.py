@@ -99,7 +99,7 @@ class VolcanoHybridData:
         self.prv1_error: bool = False
 
         # Prv2 attributes
-        self.showing_celcius: bool = False
+        self.showing_celsius: bool = False
         self.display_on_cooling: bool = False
         self.prv2_error: bool = False
 
@@ -242,7 +242,7 @@ class VolcanoBLE:
     async def _async_read_initial_characteristics(self) -> None:
         def _parse_prj2v(data: bytearray) -> None:
             prj2v = int.from_bytes(data, "little")
-            self.data.showing_celcius = bool(
+            self.data.showing_celsius = bool(
                 prj2v & MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA == 0
             )
             self.data.display_on_cooling = bool(
@@ -389,7 +389,7 @@ class VolcanoBLE:
         self.data.set_temp = int(target)
         self._after_data_updated()
 
-    async def async_set_showing_celcius(self, on: bool) -> None:
+    async def async_set_showing_celsius(self, on: bool) -> None:
         """Set the toggle for showing Celsius."""
         if on:
             await self._write_register_2(MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA)
