@@ -52,7 +52,8 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
 
     async def _async_setup(self) -> None:
         """Connect as soon as possible."""
-        def callback(_: BluetoothServiceInfoBleak, __: BluetoothChange):
+
+        def callback(_: BluetoothServiceInfoBleak, __: BluetoothChange) -> None:
             self.hass.async_create_task(self._async_update_data())
 
         self.config_entry.async_on_unload(
@@ -76,6 +77,7 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
         return self._device.data
 
     def async_update_listeners(self) -> None:
+        """Update listeners."""
         self.last_update_success = self._device.is_connected()
         super().async_update_listeners()
 
@@ -122,7 +124,7 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
         """Set the LED brightness."""
         await self._device.async_set_led_brightness(int(brightness))
 
-    async def reconnect(self):
+    async def reconnect(self) -> None:
         """Attempt to reconnect."""
         await self._device.async_disconnect()
         await self._async_update_data()

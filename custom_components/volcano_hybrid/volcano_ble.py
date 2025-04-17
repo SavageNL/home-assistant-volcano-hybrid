@@ -1,16 +1,18 @@
 """Volcano Hybrid BLE communication module."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from bleak import BleakClient, BleakError, BLEDevice
 from bleak.backends.service import BleakGATTService
-from bleak_retry_connector import retry_bluetooth_connection_error
 from habluetooth import BluetoothServiceInfoBleak
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -120,9 +122,7 @@ class VolcanoHybridData:
     def current_on_time(self) -> int:
         """Get the current auto off time in minutes."""
         off_time = self.current_auto_off_time
-        return (
-            None if off_time is None else self.shut_off - off_time
-        )
+        return None if off_time is None else self.shut_off - off_time
 
     @current_auto_off_time.setter
     def current_auto_off_time(self, value: int) -> None:
@@ -137,11 +137,11 @@ class VolcanoBLE:
     """Volcano BLE class."""
 
     def __init__(
-            self,
-            data_updated: Callable[[], None],
-            device_updated: Callable[[], None],
-            *,
-            device: BLEDevice = None,
+        self,
+        data_updated: Callable[[], None],
+        device_updated: Callable[[], None],
+        *,
+        device: BLEDevice = None,
     ) -> None:
         """Initialize VolcanoBLE."""
         self._after_data_updated = data_updated
@@ -451,11 +451,11 @@ class VolcanoBLE:
             self._after_data_updated()
 
     async def _async_read_and_subscribe(
-            self,
-            service: str,
-            characteristic: str,
-            value_change_callback: Callable[[bytearray], None],
-            subscribe: bool,
+        self,
+        service: str,
+        characteristic: str,
+        value_change_callback: Callable[[bytearray], None],
+        subscribe: bool,
     ) -> None:
         """Read a characteristic from the BLE device."""
         if not self.is_connected():
@@ -464,7 +464,9 @@ class VolcanoBLE:
         service: BleakGATTService = self.client.services.get_service(service)
         char = service.get_characteristic(characteristic)
         current_value = await self.client.read_gatt_char(char)
-        if subscribe and self.is_connected():  # We just awaited a read, we could be disconnected now
+        if (
+            subscribe and self.is_connected()
+        ):  # We just awaited a read, we could be disconnected now
             try:
                 await self.client.start_notify(
                     char, lambda _, data: value_change_callback(data)
@@ -474,10 +476,10 @@ class VolcanoBLE:
         value_change_callback(current_value)
 
     async def _write_gatt(
-            self,
-            service: str,
-            characteristic: str,
-            value: bytearray,
+        self,
+        service: str,
+        characteristic: str,
+        value: bytearray,
     ) -> None:
         """Write to the GATT characteristic."""
         if not await self._ensure_client_connected():

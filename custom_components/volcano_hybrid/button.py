@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import TYPE_CHECKING
 
-from homeassistant.components.button import ButtonEntityDescription, ButtonDeviceClass, ButtonEntity
+from homeassistant.components.button import (
+    ButtonDeviceClass,
+    ButtonEntity,
+    ButtonEntityDescription,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
@@ -12,6 +16,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import VolcanoHybridCoordinator
 from .volcano_ble import VolcanoSensor
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 SENSOR_DESCRIPTIONS: dict[str, ButtonEntityDescription] = {
     VolcanoSensor.RECONNECT: ButtonEntityDescription(
@@ -49,7 +56,10 @@ class VolcanoButtonEntity(ButtonEntity):
     """Representation of a Volcano button."""
 
     def __init__(
-        self, coordinator: VolcanoHybridCoordinator, key: VolcanoSensor, async_callback: Callable
+        self,
+        coordinator: VolcanoHybridCoordinator,
+        key: VolcanoSensor,
+        async_callback: Callable,
     ) -> None:
         """Initialize the sensor."""
         super().__init__()
