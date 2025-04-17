@@ -64,10 +64,9 @@ class VolcanyHybridClimate(CoordinatorEntity, ClimateEntity):
         )
 
         self._attr_current_temperature = 0
-        self._attr_target_temperature = 0
+        self._attr_target_temperature = 40
         self._attr_hvac_mode = HVACMode.OFF
         self._attr_fan_mode = "off"
-        self._attr_available = False
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -77,7 +76,6 @@ class VolcanyHybridClimate(CoordinatorEntity, ClimateEntity):
             HVACMode.HEAT if self.coordinator.data.heater else HVACMode.OFF
         )
         self._attr_fan_mode = "on" if self.coordinator.data.fan else "off"
-        self._attr_available = self.coordinator.data.available
         super()._handle_coordinator_update()
 
     async def async_set_temperature(self, **kwargs: any) -> None:

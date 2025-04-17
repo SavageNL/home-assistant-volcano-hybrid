@@ -47,6 +47,7 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
             connections={(CONNECTION_BLUETOOTH, address)},
         )
         self._device = VolcanoBLE(self.async_update_listeners, self.update_device)
+        self.data = self._device.data
         self.address = address
 
     async def _async_setup(self) -> None:
@@ -71,8 +72,12 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
         """Fetch data from API endpoint."""
         device = bluetooth.async_ble_device_from_address(self.hass, self.address, True)
         if device:
-            await self._device.async_update_from_device(device)
+            await self._device.async_manual_update(device)
         return self._device.data
+
+    def async_update_listeners(self) -> None:
+        self.last_update_success = self._device.is_connected()
+        super().async_update_listeners()
 
     def update_device(self) -> None:
         """Update the device registry with the latest data."""

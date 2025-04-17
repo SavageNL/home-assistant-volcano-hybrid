@@ -79,7 +79,6 @@ class VolcanoHybridData:
         """Initialize the Volcano Hybrid data object."""
         self.current_temp: int = 0
         self.set_temp: int = 0
-        self.available: bool = False
 
         self.serial_number: str = ""
         self.firmware_version: str = ""
@@ -137,11 +136,11 @@ class VolcanoBLE:
     """Volcano BLE class."""
 
     def __init__(
-        self,
-        data_updated: Callable[[], None],
-        device_updated: Callable[[], None],
-        *,
-        device: BLEDevice = None,
+            self,
+            data_updated: Callable[[], None],
+            device_updated: Callable[[], None],
+            *,
+            device: BLEDevice = None,
     ) -> None:
         """Initialize VolcanoBLE."""
         self._after_data_updated = data_updated
@@ -150,11 +149,15 @@ class VolcanoBLE:
         self.device = device
         self.data = VolcanoHybridData()
 
+    def is_connected(self) -> bool:
+        """Return True if the device is connected."""
+        return self.client and self.client.is_connected
+
     def is_supported(self, service_info: BluetoothServiceInfoBleak) -> bool:
         """Check if the device is supported."""
         return STORZ_BICKEL_MANUFACTURER_ID in service_info.manufacturer_id
 
-    async def async_update_from_device(self, device: BLEDevice) -> VolcanoHybridData:
+    async def async_manual_update(self, device: BLEDevice) -> VolcanoHybridData:
         """Trigger an update of the Volcano device data."""
         if device and device != self.device:
             await self.async_disconnect()
@@ -176,7 +179,7 @@ class VolcanoBLE:
                 _LOGGER.debug("Connecting to BLE device at %s", self.device.address)
                 await self.client.connect()
                 self._after_data_updated()
-                await self._async_read_and_subscribe_all(initial=True)
+                await self._async_read_and_subscribe_all()
         except BleakError:
             _LOGGER.exception("Failed to connect to BLE device")
             await self.async_disconnect()
@@ -186,60 +189,35 @@ class VolcanoBLE:
     def _disconnected(self, client: BleakClient) -> None:
         """Handle disconnection events."""
         _LOGGER.debug("Disconnected from BLE device at %s", client.address)
-        self.data.available = False
         self._after_data_updated()
 
-    @retry_bluetooth_connection_error()
-    async def _async_read_and_subscribe_all(
-        self, initial: bool = False
-    ) -> VolcanoHybridData:
+    async def _async_read_and_subscribe_all(self) -> VolcanoHybridData:
         """Read all required characteristics from the BLE device."""
         try:
-
-            def _read_current_temp(data: bytearray) -> None:
-                self.data.current_temp = int(int.from_bytes(data, "little") / 10)
-                self._after_data_updated()
-
-            def _read_set_temp(data: bytearray) -> None:
-                self.data.set_temp = int(int.from_bytes(data, "little") / 10)
-                self._after_data_updated()
-
-            def _read_prj1v(data: bytearray) -> None:
-                prj1v = int.from_bytes(data, "little")
-                self.data.heater = bool(prj1v & MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA)
-                self.data.fan = bool(prj1v & MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE)
-                self.data.auto_shutdown = bool(
-                    prj1v & MASK_PRJSTAT1_VOLCANO_ENABLE_AUTOBLESHUTDOWN
-                )
-                self.data.prv1_error = bool(prj1v & MASK_PRJSTAT1_VOLCANO_ERR)
-                self._after_data_updated()
-
-            await asyncio.gather(
-                self._async_read_and_subscribe(
-                    SERVICE_UUID,
-                    CHARACTERISTIC_CURRENT_TEMP,
-                    _read_current_temp,
-                    subscribe=initial,
-                ),
-                self._async_read_and_subscribe(
-                    SERVICE_UUID,
-                    CHARACTERISTIC_SET_TEMP,
-                    _read_set_temp,
-                    subscribe=initial,
-                ),
-                self._async_read_and_subscribe(
-                    SERVICE3_UUID, CHARACTERISTIC_PRJ1V, _read_prj1v, subscribe=initial
-                ),
-            )
-
-            if initial:
-                await self._async_read_initial_characteristics()
-            self.data.available = True
+            await self._async_read_initial_characteristics()
         except BleakError:
             _LOGGER.exception("Error reading characteristics")
         return self.data
 
     async def _async_read_initial_characteristics(self) -> None:
+        def _read_current_temp(data: bytearray) -> None:
+            self.data.current_temp = int(int.from_bytes(data, "little") / 10)
+            self._after_data_updated()
+
+        def _read_set_temp(data: bytearray) -> None:
+            self.data.set_temp = int(int.from_bytes(data, "little") / 10)
+            self._after_data_updated()
+
+        def _read_prj1v(data: bytearray) -> None:
+            prj1v = int.from_bytes(data, "little")
+            self.data.heater = bool(prj1v & MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA)
+            self.data.fan = bool(prj1v & MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE)
+            self.data.auto_shutdown = bool(
+                prj1v & MASK_PRJSTAT1_VOLCANO_ENABLE_AUTOBLESHUTDOWN
+            )
+            self.data.prv1_error = bool(prj1v & MASK_PRJSTAT1_VOLCANO_ERR)
+            self._after_data_updated()
+
         def _parse_prj2v(data: bytearray) -> None:
             prj2v = int.from_bytes(data, "little")
             self.data.showing_celsius = bool(
@@ -289,6 +267,21 @@ class VolcanoBLE:
             self.data.led_brightness = int.from_bytes(data, "little")
 
         await asyncio.gather(
+            self._async_read_and_subscribe(
+                SERVICE_UUID,
+                CHARACTERISTIC_CURRENT_TEMP,
+                _read_current_temp,
+                subscribe=True,
+            ),
+            self._async_read_and_subscribe(
+                SERVICE_UUID,
+                CHARACTERISTIC_SET_TEMP,
+                _read_set_temp,
+                subscribe=True,
+            ),
+            self._async_read_and_subscribe(
+                SERVICE3_UUID, CHARACTERISTIC_PRJ1V, _read_prj1v, subscribe=True
+            ),
             self._async_read_and_subscribe(
                 SERVICE3_UUID,
                 CHARACTERISTIC_SERIAL_NUMBER,
@@ -454,31 +447,36 @@ class VolcanoBLE:
             if self.client.is_connected:
                 await self.client.disconnect()
             self.client = None
+            self._after_data_updated()
 
     async def _async_read_and_subscribe(
-        self,
-        service: str,
-        characteristic: str,
-        value_change_callback: Callable[[bytearray], None],
-        subscribe: bool,
+            self,
+            service: str,
+            characteristic: str,
+            value_change_callback: Callable[[bytearray], None],
+            subscribe: bool,
     ) -> None:
         """Read a characteristic from the BLE device."""
-        if not await self._ensure_client_connected():
+        if not self.is_connected():
             return
 
         service: BleakGATTService = self.client.services.get_service(service)
         char = service.get_characteristic(characteristic)
-        if subscribe:
-            await self.client.start_notify(
-                char, lambda _, data: value_change_callback(data)
-            )
-        value_change_callback(await self.client.read_gatt_char(char))
+        current_value = await self.client.read_gatt_char(char)
+        if subscribe and self.is_connected():  # We just awaited a read, we could be disconnected now
+            try:
+                await self.client.start_notify(
+                    char, lambda _, data: value_change_callback(data)
+                )
+            except BleakError:
+                await self.async_disconnect()
+        value_change_callback(current_value)
 
     async def _write_gatt(
-        self,
-        service: str,
-        characteristic: str,
-        value: bytearray,
+            self,
+            service: str,
+            characteristic: str,
+            value: bytearray,
     ) -> None:
         """Write to the GATT characteristic."""
         if not await self._ensure_client_connected():

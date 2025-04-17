@@ -76,12 +76,10 @@ class VolcanoNumberEntity(CoordinatorEntity, NumberEntity):
         self._key = key
         self._attr_unique_id = f"{coordinator.address}-{key}"
         self._attr_device_info = coordinator.device_info
-        self._attr_available = self.coordinator.data.available
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self._attr_native_value = self.coordinator.data.get(self._key)
-        self._attr_available = self.coordinator.data.available
         super()._handle_coordinator_update()
 
     async def async_set_native_value(self, value: float) -> None:
