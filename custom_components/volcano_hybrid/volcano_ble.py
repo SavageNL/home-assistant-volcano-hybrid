@@ -209,13 +209,16 @@ class VolcanoBLE:
                     SERVICE_UUID,
                     CHARACTERISTIC_CURRENT_TEMP,
                     _read_current_temp,
-                    initial,
+                    subscribe=initial,
                 ),
                 self._async_read_and_subscribe(
-                    SERVICE_UUID, CHARACTERISTIC_SET_TEMP, _read_set_temp, initial
+                    SERVICE_UUID,
+                    CHARACTERISTIC_SET_TEMP,
+                    _read_set_temp,
+                    subscribe=initial,
                 ),
                 self._async_read_and_subscribe(
-                    SERVICE3_UUID, CHARACTERISTIC_PRJ1V, _read_prj1v, initial
+                    SERVICE3_UUID, CHARACTERISTIC_PRJ1V, _read_prj1v, subscribe=initial
                 ),
             )
 
@@ -447,7 +450,7 @@ class VolcanoBLE:
         service: str,
         characteristic: str,
         value_change_callback: Callable[[bytearray], None],
-        *subscribe: bool,
+        subscribe: bool,
     ) -> None:
         """Read a characteristic from the BLE device."""
         if not await self._ensure_client_connected():
