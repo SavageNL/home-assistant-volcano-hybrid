@@ -1,6 +1,6 @@
 # Home Assistant Volcano Hybrid
 [![hacs][hacs_badge]][hacs_url]
-[![Validate](validate_badge)](validate_url)
+[![Validate][validate_badge]][validate_url]
 
 [![gh_latest_release_badge]][gh_latest_release_url] 
 ![gh_release_date_badge]
@@ -244,8 +244,8 @@ I use these, combined with a dimmer switch.
 ```
 
 
-[validate_url]: https://github.com/SavageNL/home-assistant-volcano-hybrid/actions/workflows/validate.yaml
-[validate_badge]: https://github.com/SavageNL/home-assistant-volcano-hybrid/actions/workflows/validate.yaml/badge.svg
+[validate_url]: https://github.com/SavageNL/home-assistant-volcano-hybrid/actions/workflows/validate.yml
+[validate_badge]: https://github.com/SavageNL/home-assistant-volcano-hybrid/actions/workflows/validate.yml/badge.svg
 [hacs_url]: https://github.com/hacs/integration
 [hacs_badge]: https://img.shields.io/badge/HACS-Default-orange.svg
 [gh_latest_release_badge]: https://img.shields.io/github/v/release/SavageNL/home-assistant-volcano-hybrid
