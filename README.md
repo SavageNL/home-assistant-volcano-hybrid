@@ -40,6 +40,9 @@ Additionally there are the following configuration/diagnostic entities:
 - Whether vibration is enabled (configurable)
 - The total heating time
 - Whether the auto off timer is enabled (this is essentially the same as the heating state)
+- The device connected state
+- A reconnect button
+- The rssi from the last ble message
 
 ## Notice
 
@@ -154,7 +157,7 @@ cards:
 ## Automatically progress temperature over time
 
 This is an example automation that will automatically increase the temperature in 5-minute intervals.
-Follows the [Vapesuvius temp guide](https://www.reddit.com/user/Vapesuvius/comments/zuwcs7/vapesuvius_unofficial_storz_bickel_temp_guide_2nd/)
+Follows the [Vapesuvius temp guide](https://www.reddit.com/user/Vapesuvius/comments/zuwcs7/vapesuvius_unofficial_storz_bickel_temp_guide_2nd/) (for temp, not time)
 
 ```yaml
 alias: Volcano progress
@@ -164,36 +167,32 @@ triggers:
     entity_id:
       - sensor.volcano_hybrid_current_on_time
     above: 0
-    below: 5
     id: "179"
-    alias: 0-5 => 179
+    alias: 0 => 179
   - trigger: numeric_state
     entity_id:
       - sensor.volcano_hybrid_current_on_time
     above: 5
-    below: 10
     id: "185"
-    alias: 5-10 => 185
+    alias: 5 => 185
   - trigger: numeric_state
     entity_id:
       - sensor.volcano_hybrid_current_on_time
     above: 10
-    below: 15
     id: "191"
-    alias: 10-15 => 191
+    alias: 10 => 191
   - trigger: numeric_state
     entity_id:
       - sensor.volcano_hybrid_current_on_time
     above: 15
-    below: 20
     id: "199"
-    alias: 15-20 => 100
+    alias: 15 => 199
   - trigger: numeric_state
     entity_id:
       - sensor.volcano_hybrid_current_on_time
     above: 20
     id: "205"
-    alias: 20-25 => 205
+    alias: 20 => 205
 conditions: []
 actions:
   - action: climate.set_temperature
