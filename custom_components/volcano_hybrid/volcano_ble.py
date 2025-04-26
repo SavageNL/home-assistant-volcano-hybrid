@@ -7,7 +7,7 @@ import logging
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from bleak import BleakClient, BleakError, BLEDevice
+from bleak import BleakClient, BleakError, BleakGATTCharacteristic, BLEDevice
 from bleak.backends.service import BleakGATTService
 from habluetooth import BluetoothServiceInfoBleak
 
@@ -33,6 +33,8 @@ class VolcanoSensor(StrEnum):
     PRV2_ERROR = "prv2_error"
     VIBRATION = "vibration"
     RECONNECT = "reconnect"
+    CONNECTED = "connected"
+    RSSI = "rssi"
 
 
 STORZ_BICKEL_MANUFACTURER_ID = 1736
@@ -78,8 +80,9 @@ MASK_PRJSTAT3_VOLCANO_VIBRATION = 1024
 class VolcanoHybridData:
     """Data object to hold Volcano Hybrid data."""
 
-    def __init__(self) -> None:
+    def __init__(self, device: VolcanoBLE) -> None:
         """Initialize the Volcano Hybrid data object."""
+        self.device = device
         self.current_temp: int = 0
         self.set_temp: int = 0
 
@@ -107,6 +110,16 @@ class VolcanoHybridData:
 
         # Prv3 attributes
         self.vibration: bool = False
+
+    @property
+    def connected(self) -> bool:
+        """Get the current auto off time in minutes."""
+        return self.device.is_connected()
+
+    @property
+    def rssi(self) -> int:
+        """The current rssi."""
+        return self.device.rssi
 
     @property
     def heat_time(self) -> int:
@@ -148,11 +161,16 @@ class VolcanoBLE:
         self._after_device_updated = device_updated
         self.client: BleakClient | None = None
         self.device = device
-        self.data = VolcanoHybridData()
+        self.data = VolcanoHybridData(self)
+
+    @property
+    def rssi(self) -> int:
+        """Get the current auto off time in minutes."""
+        return self.device.rssi
 
     def is_connected(self) -> bool:
         """Return True if the device is connected."""
-        return self.client and self.client.is_connected
+        return bool(self.client and self.client.is_connected)
 
     def is_supported(self, service_info: BluetoothServiceInfoBleak) -> bool:
         """Check if the device is supported."""
@@ -163,6 +181,8 @@ class VolcanoBLE:
         if device and device != self.device:
             await self.async_disconnect()
             self.device = device
+            self._after_data_updated()
+
         # This will update when not connected yet
         await self._ensure_client_connected()
         return self.data
@@ -203,11 +223,9 @@ class VolcanoBLE:
     async def _async_read_initial_characteristics(self) -> None:
         def _read_current_temp(data: bytearray) -> None:
             self.data.current_temp = int(int.from_bytes(data, "little") / 10)
-            self._after_data_updated()
 
         def _read_set_temp(data: bytearray) -> None:
             self.data.set_temp = int(int.from_bytes(data, "little") / 10)
-            self._after_data_updated()
 
         def _read_prj1v(data: bytearray) -> None:
             prj1v = int.from_bytes(data, "little")
@@ -217,7 +235,6 @@ class VolcanoBLE:
                 prj1v & MASK_PRJSTAT1_VOLCANO_ENABLE_AUTOBLESHUTDOWN
             )
             self.data.prv1_error = bool(prj1v & MASK_PRJSTAT1_VOLCANO_ERR)
-            self._after_data_updated()
 
         def _parse_prj2v(data: bytearray) -> None:
             prj2v = int.from_bytes(data, "little")
@@ -228,7 +245,6 @@ class VolcanoBLE:
                 prj2v & MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING == 0
             )
             self.data.prv2_error = bool(prj2v & MASK_PRJSTAT2_VOLCANO_ERR)
-            self._after_data_updated()
 
         def _parse_prj3v(data: bytearray) -> None:
             prj3v = int.from_bytes(data, "little")
@@ -251,15 +267,12 @@ class VolcanoBLE:
 
         def _parse_current_auto_off_time(data: bytearray) -> None:
             self.data.current_auto_off_time = int.from_bytes(data, "little") / 60
-            self._after_data_updated()
 
         def _parse_heat_hours_changed(data: bytearray) -> None:
             self.data.heat_hours_changed = int.from_bytes(data, "little")
-            self._after_data_updated()
 
         def _parse_heat_minutes_changed(data: bytearray) -> None:
             self.data.heat_minutes_changed = int.from_bytes(data, "little")
-            self._after_data_updated()
 
         def _parse_shut_off(data: bytearray) -> None:
             self.data.shut_off = int(int.from_bytes(data, "little") / 60)
@@ -348,6 +361,7 @@ class VolcanoBLE:
             ),
         )
         _LOGGER.debug("Initial characteristics read complete")
+        self._after_data_updated()
         self._after_device_updated()
 
     async def async_set_fan(self, on: bool) -> None:
@@ -468,9 +482,12 @@ class VolcanoBLE:
             subscribe and self.is_connected()
         ):  # We just awaited a read, we could be disconnected now
             try:
-                await self.client.start_notify(
-                    char, lambda _, data: value_change_callback(data)
-                )
+
+                def _callback(_: BleakGATTCharacteristic, data: bytearray) -> None:
+                    value_change_callback(data)
+                    self._after_data_updated()
+
+                await self.client.start_notify(char, _callback)
             except BleakError:
                 await self.async_disconnect()
         value_change_callback(current_value)
