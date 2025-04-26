@@ -1,0 +1,38 @@
+name: Create Draft Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  draft:
+    name: Build draft release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: get properties
+        id: manifest
+        uses: ActionsTools/read-json-action@main
+        with:
+          file_path: "custom_components/volcano_hybrid/manifest.json"
+
+      - name: Remove Old draft
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/{owner}/{repo}/releases  --jq '.[] | select(.draft == true) | .id' \
+            | xargs -I '{}' gh api -X DELETE repos/{owner}/{repo}/releases/{}
+
+      - name: Create new draft
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.manifest.outputs.version }}" \
+            --draft \
+            --title "v${{ steps.manifest.outputs.version }}" \
+            --generate-notes
