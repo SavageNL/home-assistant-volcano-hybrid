@@ -1,0 +1,38 @@
+name: Validate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  draft:
+    name: Build draft release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get current version
+        id: version
+        run: |
+          echo 'MANIFEST<<EOF' >> $GITHUB_ENV
+          cat ./custom_components/volcano_hybrid/manifest.json >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+          echo "version=${{ fromJson(env.MANIFEST).version }}" >> $GITHUB_OUTPUT
+
+      - name: Remove Old draft
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/{owner}/{repo}/releases  --jq '.[] | select(.draft == true) | .id' \
+            | xargs -I '{}' gh api -X DELETE repos/{owner}/{repo}/releases/{}
+
+      - name: Create new draft
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.version }}" \
+            --prerelease \
+            --title "v${{ steps.version.outputs.version }}" \
+            --generate-notes
