@@ -12,6 +12,7 @@ from homeassistant.components.bluetooth import BluetoothChange
 from homeassistant.components.bluetooth.match import BluetoothCallbackMatcher
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH
 from homeassistant.helpers.entity import DeviceInfo
@@ -49,6 +50,17 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
         self._device = VolcanoBLE(self.async_update_listeners, self.update_device)
         self.data = self._device.data
         self.address = address
+
+    async def async_config_entry_first_refresh(self) -> None:
+        """Ensure that the config entry is ready."""
+        try:
+            await super().async_config_entry_first_refresh()
+        except ConfigEntryNotReady:
+            _LOGGER.debug(
+                "Config entry is determined not to be ready, but "
+                "that's because we can't connect. We will connect "
+                "later and are ready now."
+            )
 
     async def _async_setup(self) -> None:
         """Connect as soon as possible."""
