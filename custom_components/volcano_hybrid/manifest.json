@@ -2,7 +2,8 @@
   "domain": "volcano_hybrid",
   "name": "Volcano Hybrid",
   "bluetooth": [{
-    "manufacturer_id": 1736
+    "manufacturer_id": 1736,
+    "local_name": "S&B VOLCANO*"
   }],
   "codeowners": ["@SavageNL"],
   "config_flow": true,
