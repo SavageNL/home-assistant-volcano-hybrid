@@ -96,7 +96,11 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
     def update_device(self) -> None:
         """Update the device registry with the latest data."""
         dev_reg = dr.async_get(self.hass)
-        device_id = dev_reg.async_get_device(self.device_info.get("identifiers")).id
+        device = dev_reg.async_get_device(self.device_info.get("identifiers"))
+        if not device:
+            return
+
+        device_id = device.id
         dr.async_get(self.hass).async_update_device(
             device_id=device_id,
             serial_number=self.data.serial_number,
