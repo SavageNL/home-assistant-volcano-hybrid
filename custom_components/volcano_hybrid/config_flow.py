@@ -13,6 +13,7 @@ from homeassistant.components.bluetooth import (
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import DOMAIN
+from .volcano_ble import VolcanoBLE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ class VolcanoHybridConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> FlowResult:
         """Handle discovery initiated by Bluetooth."""
-        _LOGGER.debug("Discovered device: %s", discovery_info)
+        _LOGGER.debug("Discovered device: %s (supported: %s)", discovery_info, VolcanoBLE.is_supported(discovery_info))
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
         self._discovered_device = discovery_info
