@@ -77,6 +77,7 @@ class VolcanyHybridClimate(CoordinatorEntity, ClimateEntity):
             HVACMode.HEAT if self.coordinator.data.heater else HVACMode.OFF
         )
         self._attr_fan_mode = "on" if self.coordinator.data.fan else "off"
+        self._attr_assumed_state = self.coordinator.data.is_assumed
         super()._handle_coordinator_update()
 
     async def async_set_temperature(self, **kwargs: any) -> None:

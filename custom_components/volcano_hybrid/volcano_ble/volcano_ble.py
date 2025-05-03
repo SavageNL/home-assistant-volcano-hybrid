@@ -3,40 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
-from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, TypeVar
 
 from bleak import BleakClient, BleakError, BleakGATTCharacteristic, BLEDevice
 from bleak.backends.service import BleakGATTService
 from habluetooth import BluetoothServiceInfoBleak
 
+from .volcano_hybrid_data import VolcanoHybridData, VolcanoHybridDataStatusProvider
+
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
 _LOGGER = logging.getLogger(__name__)
-
-
-class VolcanoSensor(StrEnum):
-    """Volcano sensor types."""
-
-    VOLCANO = "volcano"
-    CURRENT_AUTO_OFF_TIME = "current_auto_off_time"
-    CURRENT_ON_TIME = "current_on_time"
-    HEAT_TIME = "heat_time"
-    SHUT_OFF = "shut_off"
-    LED_BRIGHTNESS = "led_brightness"
-    AUTO_SHUTDOWN = "auto_shutdown"
-    PRV1_ERROR = "prv1_error"
-    SHOWING_CELSIUS = "showing_celsius"
-    DISPLAY_ON_COOLING = "display_on_cooling"
-    PRV2_ERROR = "prv2_error"
-    VIBRATION = "vibration"
-    RECONNECT = "reconnect"
-    CONNECTED = "connected"
-    RSSI = "rssi"
-
-
+T = TypeVar("T")
 STORZ_BICKEL_MANUFACTURER_ID = 1736
 
 # BLE service and characteristic placeholders
@@ -77,96 +58,18 @@ MASK_PRJSTAT2_VOLCANO_ERR = 59
 MASK_PRJSTAT3_VOLCANO_VIBRATION = 1024
 
 
-class VolcanoHybridData:
-    """Data object to hold Volcano Hybrid data."""
-
-    def __init__(self, device: VolcanoBLE) -> None:
-        """Initialize the Volcano Hybrid data object."""
-        self.device = device
-        self.current_temp: int | None = None
-        self.set_temp: int | None = None
-
-        self.serial_number: str | None = None
-        self.firmware_version: str | None = None
-        self.firmware_ble_version: str | None = None
-        self.bootloader_version: str | None = None
-        self.firmware: str | None = None
-        self._current_auto_off_time: int | None = None
-        self.heat_hours_changed: int | None = None
-        self.heat_minutes_changed: int | None = None
-        self.shut_off: int | None = None
-        self.led_brightness: int | None = None
-
-        # Prv1 attributes
-        self.heater: bool | None = None
-        self.fan: bool | None = None
-        self.auto_shutdown: bool | None = None
-        self.prv1_error: bool | None = None
-
-        # Prv2 attributes
-        self.showing_celsius: bool | None = None
-        self.display_on_cooling: bool | None = None
-        self.prv2_error: bool | None = None
-
-        # Prv3 attributes
-        self.vibration: bool | None = None
-
-        # Attributes that will be set frequently and which we want to track being set
-        self.set_temp_write: int | None = None
-        self.heater_write: bool | None = None
-        self.fan_write: bool | None = None
-
-    @property
-    def connected(self) -> bool:
-        """Get the current auto off time in minutes."""
-        return self.device.is_connected()
-
-    @property
-    def rssi(self) -> int:
-        """The current rssi."""
-        return self.device.rssi
-
-    @property
-    def heat_time(self) -> int | None:
-        """Get the current auto off time in minutes."""
-        if self.heat_hours_changed is None or self.heat_minutes_changed is None:
-            return None
-        return self.heat_hours_changed * 60 + self.heat_minutes_changed
-
-    @property
-    def current_auto_off_time(self) -> int | None:
-        """Get the current auto off time in minutes."""
-        if self._current_auto_off_time and self._current_auto_off_time > 0:
-            return self._current_auto_off_time
-        return None
-
-    @property
-    def current_on_time(self) -> int | None:
-        """Get the current auto off time in minutes."""
-        if self.current_auto_off_time:
-            return self.shut_off - self.current_auto_off_time
-        return None
-
-    @current_auto_off_time.setter
-    def current_auto_off_time(self, value: int) -> None:
-        self._current_auto_off_time = value
-
-    def get(self, key: str) -> Any | None:
-        """Get the value of the specified key."""
-        return getattr(self, key)
-
-
-class VolcanoBLE:
+class VolcanoBLE(VolcanoHybridDataStatusProvider):
     """Volcano BLE class."""
 
     def __init__(
-            self,
-            data_updated: Callable[[], None],
-            device_updated: Callable[[], None],
-            *,
-            device: BLEDevice = None,
+        self,
+        data_updated: Callable[[], None],
+        device_updated: Callable[[], None],
+        *,
+        device: BLEDevice = None,
     ) -> None:
         """Initialize VolcanoBLE."""
+        super().__init__()
         self._after_data_updated = data_updated
         self._after_device_updated = device_updated
         self.client: BleakClient | None = None
@@ -230,14 +133,20 @@ class VolcanoBLE:
             _LOGGER.exception("Error reading characteristics")
         return self.data
 
-    async def _async_read_initial_characteristics(self) -> None:
-        def _read_current_temp(data: bytearray) -> None:
-            self.data.current_temp = int(int.from_bytes(data, "little") / 10)
-
-        def _read_set_temp(data: bytearray) -> None:
+    async def _async_read_set_temp(self, *, subscribe: bool = False) -> int:
+        def _read_set_temp_inner(data: bytearray) -> int:
             self.data.set_temp = int(int.from_bytes(data, "little") / 10)
+            return self.data.set_temp
 
-        def _read_prj1v(data: bytearray) -> None:
+        return await self._async_read_and_subscribe(
+            SERVICE_UUID,
+            CHARACTERISTIC_SET_TEMP,
+            _read_set_temp_inner,
+            subscribe=subscribe,
+        )
+
+    async def _async_read_prj1v(self, *, subscribe: bool = False) -> None:
+        def _read_prj1v_inner(data: bytearray) -> None:
             prj1v = int.from_bytes(data, "little")
             self.data.heater = bool(prj1v & MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA)
             self.data.fan = bool(prj1v & MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE)
@@ -245,6 +154,19 @@ class VolcanoBLE:
                 prj1v & MASK_PRJSTAT1_VOLCANO_ENABLE_AUTOBLESHUTDOWN
             )
             self.data.prv1_error = bool(prj1v & MASK_PRJSTAT1_VOLCANO_ERR)
+
+        (
+            await self._async_read_and_subscribe(
+                SERVICE3_UUID,
+                CHARACTERISTIC_PRJ1V,
+                _read_prj1v_inner,
+                subscribe=subscribe,
+            ),
+        )
+
+    async def _async_read_initial_characteristics(self) -> None:
+        def _read_current_temp(data: bytearray) -> None:
+            self.data.current_temp = int(int.from_bytes(data, "little") / 10)
 
         def _parse_prj2v(data: bytearray) -> None:
             prj2v = int.from_bytes(data, "little")
@@ -275,8 +197,9 @@ class VolcanoBLE:
         def _parse_firmware(data: bytearray) -> None:
             self.data.firmware = data.decode("utf-8").strip()
 
-        def _parse_current_auto_off_time(data: bytearray) -> None:
+        async def _parse_current_auto_off_time(data: bytearray) -> None:
             self.data.current_auto_off_time = int.from_bytes(data, "little") / 60
+            await self._async_try_ensure_written_values()
 
         def _parse_heat_hours_changed(data: bytearray) -> None:
             self.data.heat_hours_changed = int.from_bytes(data, "little")
@@ -290,6 +213,10 @@ class VolcanoBLE:
         def _parse_led_brightness(data: bytearray) -> None:
             self.data.led_brightness = int.from_bytes(data, "little")
 
+        async def _async_read_set_temp_and_subscribe() -> None:
+            await self._async_read_set_temp(subscribe=True)
+
+        await self._async_read_prj1v(subscribe=True)  # Ensure on-state is correct
         await asyncio.gather(
             self._async_read_and_subscribe(
                 SERVICE_UUID,
@@ -297,15 +224,7 @@ class VolcanoBLE:
                 _read_current_temp,
                 subscribe=True,
             ),
-            self._async_read_and_subscribe(
-                SERVICE_UUID,
-                CHARACTERISTIC_SET_TEMP,
-                _read_set_temp,
-                subscribe=True,
-            ),
-            self._async_read_and_subscribe(
-                SERVICE3_UUID, CHARACTERISTIC_PRJ1V, _read_prj1v, subscribe=True
-            ),
+            _async_read_set_temp_and_subscribe(),
             self._async_read_and_subscribe(
                 SERVICE3_UUID,
                 CHARACTERISTIC_SERIAL_NUMBER,
@@ -382,7 +301,7 @@ class VolcanoBLE:
             CHARACTERISTIC_FAN_ON if on else CHARACTERISTIC_FAN_OFF,
             bytearray([int(on)]),
         )
-        self.data.fan = on
+        self.data.fan_write = on
         self._after_data_updated()
 
     async def async_set_heater(self, on: bool) -> None:
@@ -393,7 +312,7 @@ class VolcanoBLE:
             CHARACTERISTIC_HEATER_ON if on else CHARACTERISTIC_HEATER_OFF,
             bytearray([int(on)]),
         )
-        self.data.heater = on
+        self.data.heater_write = on
         self._after_data_updated()
 
     async def async_set_target_temperature(self, target: float) -> None:
@@ -404,7 +323,8 @@ class VolcanoBLE:
             CHARACTERISTIC_SET_TEMP,
             bytearray(int.to_bytes(int(target * 10), 2, "little")),
         )
-        self.data.set_temp = int(target)
+        await self._async_read_set_temp()
+        self.data.set_temp_write = int(target)
         self._after_data_updated()
 
     async def async_set_showing_celsius(self, on: bool) -> None:
@@ -475,38 +395,47 @@ class VolcanoBLE:
             self._after_data_updated()
 
     async def _async_read_and_subscribe(
-            self,
-            service: str,
-            characteristic: str,
-            value_change_callback: Callable[[bytearray], None],
-            subscribe: bool,
-    ) -> None:
+        self,
+        service: str,
+        characteristic: str,
+        value_change_callback: Callable[[bytearray], Awaitable[T] | T],
+        subscribe: bool,
+    ) -> T:
         """Read a characteristic from the BLE device."""
         if not self.is_connected():
-            return
+            return None
+
+        async def _async_call_callback(data: bytearray) -> None:
+            if inspect.iscoroutinefunction(value_change_callback):
+                await value_change_callback(data)
+            else:
+                value_change_callback(data)
 
         service: BleakGATTService = self.client.services.get_service(service)
         char = service.get_characteristic(characteristic)
         current_value = await self.client.read_gatt_char(char)
         if (
-                subscribe and self.is_connected()
+            subscribe and self.is_connected()
         ):  # We just awaited a read, we could be disconnected now
             try:
 
-                def _callback(_: BleakGATTCharacteristic, data: bytearray) -> None:
-                    value_change_callback(data)
+                async def _async_callback(
+                    _: BleakGATTCharacteristic, data: bytearray
+                ) -> None:
+                    await _async_call_callback(data)
                     self._after_data_updated()
 
-                await self.client.start_notify(char, _callback)
+                await self.client.start_notify(char, _async_callback)
             except BleakError:
                 await self.async_disconnect()
-        value_change_callback(current_value)
+
+        return await _async_call_callback(current_value)
 
     async def _write_gatt(
-            self,
-            service: str,
-            characteristic: str,
-            value: bytearray,
+        self,
+        service: str,
+        characteristic: str,
+        value: bytearray,
     ) -> None:
         """Write to the GATT characteristic."""
         if not await self._ensure_client_connected():
@@ -518,3 +447,25 @@ class VolcanoBLE:
             char,
             value,
         )
+
+    async def _async_try_ensure_written_values(self) -> None:
+        """Ensure that the pending writes are written to the device."""
+        await self._async_read_set_temp()
+        if (
+            self.data.fan_needs_write
+            or self.data.heater_needs_write
+            or self.data.set_temp_needs_write
+        ):
+            await self._async_read_prj1v()
+            if not self.data.is_on:
+                # We don't want to turn on the device after dropping commands
+                self.data.clear_open_writes()
+
+        if self.data.fan_needs_write:
+            await self.async_set_fan(self.data.fan_write)
+
+        if self.data.heater_needs_write:
+            await self.async_set_heater(self.data.heater_write)
+
+        if self.data.set_temp_needs_write:
+            await self.async_set_target_temperature(self.data.set_temp_write)
