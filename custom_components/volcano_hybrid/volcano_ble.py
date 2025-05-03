@@ -83,33 +83,38 @@ class VolcanoHybridData:
     def __init__(self, device: VolcanoBLE) -> None:
         """Initialize the Volcano Hybrid data object."""
         self.device = device
-        self.current_temp: int = 0
-        self.set_temp: int = 0
+        self.current_temp: int | None = None
+        self.set_temp: int | None = None
 
-        self.serial_number: str = ""
-        self.firmware_version: str = ""
-        self.firmware_ble_version: str = ""
-        self.bootloader_version: str = ""
-        self.firmware: str = ""
-        self._current_auto_off_time: int = 0
-        self.heat_hours_changed: int = 0
-        self.heat_minutes_changed: int = 0
-        self.shut_off: int = 0
-        self.led_brightness: int = 0
+        self.serial_number: str | None = None
+        self.firmware_version: str | None = None
+        self.firmware_ble_version: str | None = None
+        self.bootloader_version: str | None = None
+        self.firmware: str | None = None
+        self._current_auto_off_time: int | None = None
+        self.heat_hours_changed: int | None = None
+        self.heat_minutes_changed: int | None = None
+        self.shut_off: int | None = None
+        self.led_brightness: int | None = None
 
         # Prv1 attributes
-        self.heater: bool = False
-        self.fan: bool = False
-        self.auto_shutdown: bool = False
-        self.prv1_error: bool = False
+        self.heater: bool | None = None
+        self.fan: bool | None = None
+        self.auto_shutdown: bool | None = None
+        self.prv1_error: bool | None = None
 
         # Prv2 attributes
-        self.showing_celsius: bool = False
-        self.display_on_cooling: bool = False
-        self.prv2_error: bool = False
+        self.showing_celsius: bool | None = None
+        self.display_on_cooling: bool | None = None
+        self.prv2_error: bool | None = None
 
         # Prv3 attributes
-        self.vibration: bool = False
+        self.vibration: bool | None = None
+
+        # Attributes that will be set frequently and which we want to track being set
+        self.set_temp_write: int | None = None
+        self.heater_write: bool | None = None
+        self.fan_write: bool | None = None
 
     @property
     def connected(self) -> bool:
@@ -122,26 +127,31 @@ class VolcanoHybridData:
         return self.device.rssi
 
     @property
-    def heat_time(self) -> int:
+    def heat_time(self) -> int | None:
         """Get the current auto off time in minutes."""
+        if self.heat_hours_changed is None or self.heat_minutes_changed is None:
+            return None
         return self.heat_hours_changed * 60 + self.heat_minutes_changed
 
     @property
     def current_auto_off_time(self) -> int | None:
         """Get the current auto off time in minutes."""
-        return self._current_auto_off_time if self._current_auto_off_time > 0 else None
+        if self._current_auto_off_time and self._current_auto_off_time > 0:
+            return self._current_auto_off_time
+        return None
 
     @property
-    def current_on_time(self) -> int:
+    def current_on_time(self) -> int | None:
         """Get the current auto off time in minutes."""
-        off_time = self.current_auto_off_time
-        return None if off_time is None else self.shut_off - off_time
+        if self.current_auto_off_time:
+            return self.shut_off - self.current_auto_off_time
+        return None
 
     @current_auto_off_time.setter
     def current_auto_off_time(self, value: int) -> None:
         self._current_auto_off_time = value
 
-    def get(self, key: str) -> Any:
+    def get(self, key: str) -> Any | None:
         """Get the value of the specified key."""
         return getattr(self, key)
 
@@ -150,11 +160,11 @@ class VolcanoBLE:
     """Volcano BLE class."""
 
     def __init__(
-        self,
-        data_updated: Callable[[], None],
-        device_updated: Callable[[], None],
-        *,
-        device: BLEDevice = None,
+            self,
+            data_updated: Callable[[], None],
+            device_updated: Callable[[], None],
+            *,
+            device: BLEDevice = None,
     ) -> None:
         """Initialize VolcanoBLE."""
         self._after_data_updated = data_updated
@@ -165,7 +175,7 @@ class VolcanoBLE:
 
     @property
     def rssi(self) -> int:
-        """Get the current auto off time in minutes."""
+        """Get the device rssi."""
         return self.device.rssi
 
     def is_connected(self) -> bool:
@@ -465,11 +475,11 @@ class VolcanoBLE:
             self._after_data_updated()
 
     async def _async_read_and_subscribe(
-        self,
-        service: str,
-        characteristic: str,
-        value_change_callback: Callable[[bytearray], None],
-        subscribe: bool,
+            self,
+            service: str,
+            characteristic: str,
+            value_change_callback: Callable[[bytearray], None],
+            subscribe: bool,
     ) -> None:
         """Read a characteristic from the BLE device."""
         if not self.is_connected():
@@ -479,7 +489,7 @@ class VolcanoBLE:
         char = service.get_characteristic(characteristic)
         current_value = await self.client.read_gatt_char(char)
         if (
-            subscribe and self.is_connected()
+                subscribe and self.is_connected()
         ):  # We just awaited a read, we could be disconnected now
             try:
 
@@ -493,10 +503,10 @@ class VolcanoBLE:
         value_change_callback(current_value)
 
     async def _write_gatt(
-        self,
-        service: str,
-        characteristic: str,
-        value: bytearray,
+            self,
+            service: str,
+            characteristic: str,
+            value: bytearray,
     ) -> None:
         """Write to the GATT characteristic."""
         if not await self._ensure_client_connected():
