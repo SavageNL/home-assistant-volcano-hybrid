@@ -62,11 +62,11 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     """Volcano BLE class."""
 
     def __init__(
-            self,
-            data_updated: Callable[[], None],
-            device_updated: Callable[[], None],
-            *,
-            device: BLEDevice = None,
+        self,
+        data_updated: Callable[[], None],
+        device_updated: Callable[[], None],
+        *,
+        device: BLEDevice = None,
     ) -> None:
         """Initialize VolcanoBLE."""
         super().__init__()
@@ -80,8 +80,8 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     def is_supported(service_info: BluetoothServiceInfoBleak) -> bool:
         """Check if the device is supported."""
         return (
-                STORZ_BICKEL_MANUFACTURER_ID in service_info.manufacturer_id
-                and 'S&B VOLCANO' in service_info.name
+            STORZ_BICKEL_MANUFACTURER_ID in service_info.manufacturer_id
+            and "S&B VOLCANO" in service_info.name
         )
 
     @property
@@ -399,11 +399,11 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             self._after_data_updated()
 
     async def _async_read_and_subscribe(
-            self,
-            service: str,
-            characteristic: str,
-            value_change_callback: Callable[[bytearray], Awaitable[T] | T],
-            subscribe: bool,
+        self,
+        service: str,
+        characteristic: str,
+        value_change_callback: Callable[[bytearray], Awaitable[T] | T],
+        subscribe: bool,
     ) -> T:
         """Read a characteristic from the BLE device."""
         if not self.is_connected():
@@ -419,12 +419,12 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         char = service.get_characteristic(characteristic)
         current_value = await self.client.read_gatt_char(char)
         if (
-                subscribe and self.is_connected()
+            subscribe and self.is_connected()
         ):  # We just awaited a read, we could be disconnected now
             try:
 
                 async def _async_callback(
-                        _: BleakGATTCharacteristic, data: bytearray
+                    _: BleakGATTCharacteristic, data: bytearray
                 ) -> None:
                     await _async_call_callback(data)
                     self._after_data_updated()
@@ -436,10 +436,10 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         return await _async_call_callback(current_value)
 
     async def _write_gatt(
-            self,
-            service: str,
-            characteristic: str,
-            value: bytearray,
+        self,
+        service: str,
+        characteristic: str,
+        value: bytearray,
     ) -> None:
         """Write to the GATT characteristic."""
         if not await self._ensure_client_connected():
@@ -456,9 +456,9 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         """Ensure that the pending writes are written to the device."""
         await self._async_read_set_temp()
         if (
-                self.data.fan_needs_write
-                or self.data.heater_needs_write
-                or self.data.set_temp_needs_write
+            self.data.fan_needs_write
+            or self.data.heater_needs_write
+            or self.data.set_temp_needs_write
         ):
             await self._async_read_prj1v()
             if not self.data.is_on:

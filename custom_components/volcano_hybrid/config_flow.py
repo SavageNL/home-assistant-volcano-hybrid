@@ -48,7 +48,11 @@ class VolcanoHybridConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> FlowResult:
         """Handle discovery initiated by Bluetooth."""
-        _LOGGER.debug("Discovered device: %s (supported: %s)", discovery_info, VolcanoBLE.is_supported(discovery_info))
+        _LOGGER.debug(
+            "Discovered device: %s (supported: %s)",
+            discovery_info,
+            VolcanoBLE.is_supported(discovery_info),
+        )
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
         self._discovered_device = discovery_info
