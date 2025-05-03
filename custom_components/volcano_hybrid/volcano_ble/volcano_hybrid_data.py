@@ -78,6 +78,11 @@ class VolcanoHybridData:
         self.set_temp_write = None
 
     @property
+    def fan_state(self) -> bool | None:
+        """Return the current fan state (updated before actually confirmed to be written)."""
+        return self.fan_write if self.fan_write is not None else self.fan
+
+    @property
     def fan(self) -> bool | None:
         """Return the current fan state."""
         return self._fan
@@ -95,6 +100,11 @@ class VolcanoHybridData:
         return self.fan_write is not None and self.fan != self.fan_write
 
     @property
+    def heater_state(self) -> bool | None:
+        """Return the current heater state (updated before actually confirmed to be written)."""
+        return self.heater_write if self.heater_write is not None else self.heater
+
+    @property
     def heater(self) -> bool | None:
         """Returns the current heater state."""
         return self._heater
@@ -110,6 +120,11 @@ class VolcanoHybridData:
     def heater_needs_write(self) -> bool:
         """Check if the heater needs to be written."""
         return self.heater_write is not None and self.heater != self.heater_write
+
+    @property
+    def set_temp_state(self) -> int | None:
+        """Return the current set_temp state (updated before actually confirmed to be written)."""
+        return self.set_temp_write if self.set_temp_write is not None else self.set_temp
 
     @property
     def set_temp(self) -> bool | None:
