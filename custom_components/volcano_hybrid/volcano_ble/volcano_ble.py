@@ -80,8 +80,8 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     def is_supported(service_info: BluetoothServiceInfoBleak) -> bool:
         """Check if the device is supported."""
         return (
-            STORZ_BICKEL_MANUFACTURER_ID in service_info.manufacturer_id
-            and "S&B VOLCANO" in service_info.name
+            STORZ_BICKEL_MANUFACTURER_ID == service_info.manufacturer_id
+            and "VOLCANO H" in service_info.name
         )
 
     @property
