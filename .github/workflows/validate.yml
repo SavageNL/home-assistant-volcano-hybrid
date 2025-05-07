@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the repository
-        uses: actions/checkout@4.2.2
+        uses: actions/checkout@4
 
       - name: Run hassfest validation
         uses: home-assistant/actions/hassfest@master
