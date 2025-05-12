@@ -36,7 +36,7 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
             _LOGGER,
             name="Volcano Hybrid",
             config_entry=config_entry,
-            update_interval=timedelta(seconds=60),
+            update_interval=timedelta(seconds=10),
             always_update=True,
         )
 

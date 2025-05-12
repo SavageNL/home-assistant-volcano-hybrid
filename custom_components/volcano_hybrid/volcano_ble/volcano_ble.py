@@ -80,7 +80,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     def is_supported(service_info: BluetoothServiceInfoBleak) -> bool:
         """Check if the device is supported."""
         return (
-            STORZ_BICKEL_MANUFACTURER_ID == service_info.manufacturer_id
+            service_info.manufacturer_id == STORZ_BICKEL_MANUFACTURER_ID
             and "VOLCANO H" in service_info.name
         )
 
@@ -102,6 +102,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
 
         # This will update when not connected yet
         await self._ensure_client_connected()
+        await self._async_try_ensure_written_values()
         return self.data
 
     async def _ensure_client_connected(self) -> bool:
@@ -455,15 +456,14 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     async def _async_try_ensure_written_values(self) -> None:
         """Ensure that the pending writes are written to the device."""
         await self._async_read_set_temp()
+        await self._async_read_prj1v()
         if (
             self.data.fan_needs_write
             or self.data.heater_needs_write
             or self.data.set_temp_needs_write
-        ):
-            await self._async_read_prj1v()
-            if not self.data.is_on:
-                # We don't want to turn on the device after dropping commands
-                self.data.clear_open_writes()
+        ) and not self.data.is_on:
+            # We don't want to turn on the device after dropping commands
+            self.data.clear_open_writes()
 
         if self.data.fan_needs_write:
             await self.async_set_fan(self.data.fan_write)
