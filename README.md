@@ -193,7 +193,13 @@ triggers:
     above: 20
     id: "205"
     alias: 20 => 205
-conditions: []
+conditions:
+  - alias: Don't trigger when device reconnects
+    condition: and
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.from_state.state not in ['unknown','unavailable'] }}"
+        alias: from_state was unknown or unavailable
 actions:
   - action: climate.set_temperature
     metadata: {}
