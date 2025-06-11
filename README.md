@@ -6,7 +6,7 @@
 ![gh_release_date_badge]
 [![gh_issues_badge]][gh_issues_url]
 
-A Storz & Bickel Volcano Hybrid integration for Home Assistant. Allows controlling core features via a single climate entity.
+A Storz & Bickel Volcano Hybrid integration for Home Assistant using Bluetooth. Allows controlling core features via a single climate entity.
 
 ![Climate entity](resources/climate_entity.png)
 
@@ -33,10 +33,10 @@ It shows the following information and allows these controls:
 - Enable/disable heating
 - Enable/disable fan
 
-Additionally there are the following configuration/diagnostic entities:
+Additionally, there are the following configuration/diagnostic entities:
 - The auto off time setting (configurable)
 - Led brightness (configurable)
-- Whether the device is showing temperature in celsius or fahrenheit (configurable)
+- Whether the device is showing temperature in Celsius or Fahrenheit (configurable)
 - Whether vibration is enabled (configurable)
 - The total heating time
 - Whether the auto off timer is enabled (this is essentially the same as the heating state)
@@ -44,16 +44,36 @@ Additionally there are the following configuration/diagnostic entities:
 - A reconnect button
 - The rssi from the last ble message
 
+## Warning
+
+### Do not leave the device unattended while using the integration
+
+That being said, there are some safety measures:
+- Temperature commands **WILL** be retried every second (while the device is on) when they don't appear to get set
+- On-commands (fan-on, heater-on) **WON'T** be retried. If they fail, they fail.
+- Off-commands **WILL** be retried (as long as the device is on, but if they fail, it will be on)
+
+This will however not protect you from losing control when bluetooth fails, so _do not leave the device unattended while using the integration_.
+
 ## Notice
 
 This integration will connect to the Volcano as soon as it finds one (after it has been setup). 
 This means that updates from the device will trigger updates in Home Assistant instantly, but also that no other bluetooth devices will be able to control the Volcano.
 
-I'm planning to make that configurable at some point.
+I might make that configurable at some point (if anyone wants it and asks for it, possibly).
 
 # Example usage
 
+- [Dashboard grid with shut-off timer and current states](#Dashboard-grid-with-shut-off-timer-and-current-states)
+- [Dashboard button card for pre-selected temperatures](#Button-card-for-pre-selected-temperatures)
+- [Automation to automatically progress temperature over time](#Automatically-progress-temperature-over-time)
+- [Example service calls to increase/decrease temperature by Vapesuvius temp guide steps](#increasedecrease-temperature-by-vapesuvius-temp-guide-steps)
+- [Script to fill a bag](#fill-a-bag)
+
+
 ## Dashboard grid with shut-off timer and current states
+
+An example grid with a header and a thermostat entity (both standard Home Assistant components).
 
 ![Climate entity](resources/tile_widget.png)
 
@@ -80,11 +100,11 @@ cards:
     name: " "
 ```
 
-## Easy temperature setting
+## Button card for pre-selected temperatures
 
 ![Climate entity](resources/set_temperature.png)
 
-Uses [Button Card](https://github.com/custom-cards/button-card)
+Example grid using [Button Card](https://github.com/custom-cards/button-card) to easily set pre-defined temperatures.
 
 ```yaml
 type: grid
@@ -246,6 +266,68 @@ I use these, combined with a dimmer switch.
       entity_id:
         - climate.volcano_hybrid
     alias: Dec temp
+```
+
+### Fill a bag
+
+This is an example script that will:
+1. Turn on the Volcano
+1. Wait for the device to heat up, and then 10s more
+1. Turn on the fan
+1. Wait for 40s (that's how long it takes to nearly fill up my standard bags, adjust to yours accordingly)
+1. Turns off the fan
+1. Waits 10 more seconds (this gives you time to turn the fan on to fill the bag completely)
+1. Turns off the Volcano
+
+```yaml
+sequence:
+  - action: climate.turn_on
+    metadata: {}
+    data: {}
+    target:
+      entity_id: climate.volcano_hybrid
+  - wait_template: >-
+      {{state_attr('climate.volcano_hybrid', 'temperature') ==
+      state_attr('climate.volcano_hybrid', 'current_temperature')}}
+    continue_on_timeout: true
+    alias: Wait for heatup
+  - alias: Wait a little bit more
+    delay:
+      hours: 0
+      minutes: 0
+      seconds: 10
+      milliseconds: 0
+  - action: climate.set_fan_mode
+    metadata: {}
+    data:
+      fan_mode: "on"
+    target:
+      entity_id: climate.volcano_hybrid
+  - alias: Wait for the bag to fill (40s)
+    delay:
+      hours: 0
+      minutes: 0
+      seconds: 41
+      milliseconds: 0
+  - action: climate.set_fan_mode
+    metadata: {}
+    data:
+      fan_mode: "off"
+    target:
+      entity_id: climate.volcano_hybrid
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 10
+      milliseconds: 0
+    alias: Wait a little bit more
+  - action: climate.turn_off
+    metadata: {}
+    data: {}
+    target:
+      entity_id: climate.volcano_hybrid
+alias: Volcano fill bag
+description: ""
 ```
 
 
