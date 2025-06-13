@@ -12,7 +12,9 @@ A Storz & Bickel Volcano Hybrid integration for Home Assistant using Bluetooth. 
 
 ## Installing
 
-Install using HACS, or download the repository and put the files from `custom-components` in your `config/custom_components` folder.
+Install using HACS (click the button below if you have it installed), or download the repository and put the folder from `custom-components` in your `config/custom_components` folder.
+
+[![Open HACS Repository On MY](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=SavageNL&repository=home-assistant-volcano-hybrid&category=integration)
 
 ## Quick start
 
