@@ -84,6 +84,11 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
     async def _async_update_data(self) -> VolcanoHybridData:
         """Fetch data from API endpoint."""
         device = bluetooth.async_ble_device_from_address(self.hass, self.address, True)
+
+        last_info = bluetooth.async_last_service_info(self.hass, self.address)
+        if last_info:
+            self._device.device_rssi = last_info.rssi
+
         if device:
             await self._device.async_manual_update(device)
         return self._device.data

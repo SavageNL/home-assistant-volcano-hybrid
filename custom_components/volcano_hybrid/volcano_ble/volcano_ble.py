@@ -75,6 +75,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         self.client: BleakClient | None = None
         self.device = device
         self.data = VolcanoHybridData(self)
+        self.device_rssi: int | None = None
 
     @staticmethod
     def is_supported(service_info: BluetoothServiceInfoBleak) -> bool:
@@ -87,7 +88,13 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     @property
     def rssi(self) -> int:
         """Get the device rssi."""
-        return self.device.rssi
+        return self.device_rssi
+
+    @rssi.setter
+    def rssi(self, value: int) -> None:
+        """Set the device rssi."""
+        self.device_rssi = value
+        self._after_data_updated()
 
     def is_connected(self) -> bool:
         """Return True if the device is connected."""
