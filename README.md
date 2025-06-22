@@ -220,8 +220,10 @@ conditions:
     condition: and
     conditions:
       - condition: template
-        value_template: "{{ trigger.from_state.state not in ['unknown','unavailable'] }}"
-        alias: from_state was unknown or unavailable
+        value_template: >-
+          {{ trigger.from_state.state not in ['unknown','unavailable'] and
+          trigger.to_state.state not in ['unknown','unavailable'] }}
+        alias: from_state or to_state was unknown or unavailable
 actions:
   - action: climate.set_temperature
     metadata: {}
