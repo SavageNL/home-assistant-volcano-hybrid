@@ -95,7 +95,7 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
 
     def async_update_listeners(self) -> None:
         """Update listeners."""
-        self.last_update_success = self._device.is_connected()
+        self.last_update_success = self._device.is_connected
         super().async_update_listeners()
 
     def update_device(self) -> None:
