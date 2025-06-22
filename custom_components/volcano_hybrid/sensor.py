@@ -87,7 +87,9 @@ async def async_setup_entry(
             VolcanoSensorEntity(coordinator, VolcanoSensor.CURRENT_ON_TIME),
             VolcanoSensorEntity(coordinator, VolcanoSensor.HEAT_TIME),
             VolcanoSensorEntity(coordinator, VolcanoSensor.RSSI, always_available=True),
-            VolcanoSensorEntity(coordinator, VolcanoSensor.CONNECTED_ADDR, always_available=True),
+            VolcanoSensorEntity(
+                coordinator, VolcanoSensor.CONNECTED_ADDR, always_available=True
+            ),
         ]
     )
 

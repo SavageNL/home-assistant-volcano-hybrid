@@ -62,11 +62,11 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     """Volcano BLE class."""
 
     def __init__(
-            self,
-            data_updated: Callable[[], None],
-            device_updated: Callable[[], None],
-            *,
-            device: BLEDevice = None,
+        self,
+        data_updated: Callable[[], None],
+        device_updated: Callable[[], None],
+        *,
+        device: BLEDevice = None,
     ) -> None:
         """Initialize VolcanoBLE."""
         super().__init__()
@@ -82,8 +82,8 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     def is_supported(service_info: BluetoothServiceInfoBleak) -> bool:
         """Check if the device is supported."""
         return (
-                service_info.manufacturer_id == STORZ_BICKEL_MANUFACTURER_ID
-                and "VOLCANO H" in service_info.name
+            service_info.manufacturer_id == STORZ_BICKEL_MANUFACTURER_ID
+            and "VOLCANO H" in service_info.name
         )
 
     @property
@@ -100,6 +100,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
 
     @property
     def connected_addr(self) -> str | None:
+        """Get the connected address (when the device is connected, None otherwise)."""
         return self.device_connected_addr if self.is_connected else None
 
     @connected_addr.setter
@@ -148,9 +149,12 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         return True
 
     def _determine_connected_device(self) -> None:
-        """ Determine the connected device address.
+        """
+        Determine the connected device address.
 
-        This seems to be what bleak_esphome.backend.client.ESPHomeClient does in its constructor"""
+        This seems to be what bleak_esphome.backend.client.ESPHomeClient does
+        in its constructor
+        """
         self.device_connected_addr = self.device.details["source"]
 
     def _disconnected(self, client: BleakClient) -> None:
@@ -428,11 +432,11 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             self._after_data_updated()
 
     async def _async_read_and_subscribe(
-            self,
-            service: str,
-            characteristic: str,
-            value_change_callback: Callable[[bytearray], Awaitable[T] | T],
-            subscribe: bool,
+        self,
+        service: str,
+        characteristic: str,
+        value_change_callback: Callable[[bytearray], Awaitable[T] | T],
+        subscribe: bool,
     ) -> T:
         """Read a characteristic from the BLE device."""
         if not self.is_connected:
@@ -448,12 +452,12 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         char = service.get_characteristic(characteristic)
         current_value = await self.client.read_gatt_char(char)
         if (
-                subscribe and self.is_connected
+            subscribe and self.is_connected
         ):  # We just awaited a read, we could be disconnected now
             try:
 
                 async def _async_callback(
-                        _: BleakGATTCharacteristic, data: bytearray
+                    _: BleakGATTCharacteristic, data: bytearray
                 ) -> None:
                     await _async_call_callback(data)
                     self._after_data_updated()
@@ -465,10 +469,10 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         return await _async_call_callback(current_value)
 
     async def _write_gatt(
-            self,
-            service: str,
-            characteristic: str,
-            value: bytearray,
+        self,
+        service: str,
+        characteristic: str,
+        value: bytearray,
     ) -> None:
         """Write to the GATT characteristic."""
         if not await self._ensure_client_connected():
@@ -486,9 +490,9 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         await self._async_read_set_temp()
         await self._async_read_prj1v()
         if (
-                self.data.fan_needs_write
-                or self.data.heater_needs_write
-                or self.data.set_temp_needs_write
+            self.data.fan_needs_write
+            or self.data.heater_needs_write
+            or self.data.set_temp_needs_write
         ) and not self.data.is_on:
             # We don't want to turn on the device after dropping commands
             self.data.clear_open_writes()
