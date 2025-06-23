@@ -68,6 +68,7 @@ class VolcanoButtonEntity(ButtonEntity):
         self._key = key
         self._attr_unique_id = f"{coordinator.address}-{key}"
         self._attr_device_info = coordinator.device_info
+        self._attr_attribution = "Data provided by Volcano Hybrid"
         self._async_on_click_callback = async_callback
 
     async def async_press(self) -> None:

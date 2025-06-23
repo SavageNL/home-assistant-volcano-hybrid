@@ -57,6 +57,7 @@ class VolcanyHybridClimate(CoordinatorEntity, ClimateEntity):
         self._attr_min_temp = 40
         self._attr_max_temp = 230
         self._attr_target_temperature_step = 1
+        self._attr_attribution = "Data provided by Volcano Hybrid"
         self._attr_supported_features = (
             ClimateEntityFeature.TARGET_TEMPERATURE
             | ClimateEntityFeature.FAN_MODE

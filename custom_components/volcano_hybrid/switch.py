@@ -75,6 +75,7 @@ class VolcanoSwitchEntity(CoordinatorEntity, SwitchEntity):
         self._key = key
         self._attr_unique_id = f"{coordinator.address}-{key}"
         self._attr_device_info = coordinator.device_info
+        self._attr_attribution = "Data provided by Volcano Hybrid"
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""

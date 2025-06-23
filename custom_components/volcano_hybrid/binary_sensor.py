@@ -94,6 +94,7 @@ class VolcanoBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         self._attr_device_info = coordinator.device_info
         self._always_available = always_available
         self._attr_is_on = initial_value
+        self._attr_attribution = "Data provided by Volcano Hybrid"
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
