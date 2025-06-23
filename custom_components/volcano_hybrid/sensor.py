@@ -63,6 +63,13 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
         entity_registry_enabled_default=False,
     ),
+    VolcanoSensor.CONNECTED_ADDR: SensorEntityDescription(
+        key=VolcanoSensor.CONNECTED_ADDR,
+        name="Connected address",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        has_entity_name=True,
+        entity_registry_enabled_default=False,
+    ),
 }
 
 
@@ -80,6 +87,9 @@ async def async_setup_entry(
             VolcanoSensorEntity(coordinator, VolcanoSensor.CURRENT_ON_TIME),
             VolcanoSensorEntity(coordinator, VolcanoSensor.HEAT_TIME),
             VolcanoSensorEntity(coordinator, VolcanoSensor.RSSI, always_available=True),
+            VolcanoSensorEntity(
+                coordinator, VolcanoSensor.CONNECTED_ADDR, always_available=True
+            ),
         ]
     )
 

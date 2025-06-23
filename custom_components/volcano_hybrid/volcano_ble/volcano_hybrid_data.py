@@ -13,8 +13,14 @@ class VolcanoHybridDataStatusProvider:
         """Get the device rssi."""
         raise NotImplementedError
 
+    @property
     def is_connected(self) -> bool:
         """Determine whether the device is connected."""
+        raise NotImplementedError
+
+    @property
+    def connected_addr(self) -> str | None:
+        """Get the connected mac address."""
         raise NotImplementedError
 
 
@@ -158,12 +164,17 @@ class VolcanoHybridData:
     @property
     def connected(self) -> bool:
         """Get the current auto off time in minutes."""
-        return self.device.is_connected()
+        return self.device.is_connected
 
     @property
     def rssi(self) -> int:
         """The current rssi."""
         return self.device.rssi
+
+    @property
+    def connected_addr(self) -> str | None:
+        """The current rssi."""
+        return self.device.connected_addr
 
     @property
     def heat_time(self) -> int | None:

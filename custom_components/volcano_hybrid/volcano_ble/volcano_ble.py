@@ -75,6 +75,8 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         self.client: BleakClient | None = None
         self.device = device
         self.data = VolcanoHybridData(self)
+        self.device_rssi: int | None = None
+        self.device_connected_addr: str | None = None
 
     @staticmethod
     def is_supported(service_info: BluetoothServiceInfoBleak) -> bool:
@@ -87,8 +89,28 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     @property
     def rssi(self) -> int:
         """Get the device rssi."""
-        return self.device.rssi
+        return self.device_rssi
 
+    @rssi.setter
+    def rssi(self, value: int) -> None:
+        """Set the device rssi."""
+        if self.device_rssi != value:
+            self.device_rssi = value
+            self._after_data_updated()
+
+    @property
+    def connected_addr(self) -> str | None:
+        """Get the connected address (when the device is connected, None otherwise)."""
+        return self.device_connected_addr if self.is_connected else None
+
+    @connected_addr.setter
+    def connected_addr(self, value: str | None) -> None:
+        """Set the connected address."""
+        if self.device_connected_addr != value:
+            self.device_connected_addr = value
+            self._after_data_updated()
+
+    @property
     def is_connected(self) -> bool:
         """Return True if the device is connected."""
         return bool(self.client and self.client.is_connected)
@@ -123,7 +145,17 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             _LOGGER.debug("Failed to connect to BLE device: %s", err)
             await self.async_disconnect()
             return False
+        self._determine_connected_device()
         return True
+
+    def _determine_connected_device(self) -> None:
+        """
+        Determine the connected device address.
+
+        This seems to be what bleak_esphome.backend.client.ESPHomeClient does
+        in its constructor
+        """
+        self.device_connected_addr = self.device.details["source"]
 
     def _disconnected(self, client: BleakClient) -> None:
         """Handle disconnection events."""
@@ -407,7 +439,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         subscribe: bool,
     ) -> T:
         """Read a characteristic from the BLE device."""
-        if not self.is_connected():
+        if not self.is_connected:
             return None
 
         async def _async_call_callback(data: bytearray) -> None:
@@ -420,7 +452,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         char = service.get_characteristic(characteristic)
         current_value = await self.client.read_gatt_char(char)
         if (
-            subscribe and self.is_connected()
+            subscribe and self.is_connected
         ):  # We just awaited a read, we could be disconnected now
             try:
 

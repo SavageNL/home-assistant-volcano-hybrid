@@ -21,3 +21,4 @@ class VolcanoSensor(StrEnum):
     RECONNECT = "reconnect"
     CONNECTED = "connected"
     RSSI = "rssi"
+    CONNECTED_ADDR = "connected_addr"
