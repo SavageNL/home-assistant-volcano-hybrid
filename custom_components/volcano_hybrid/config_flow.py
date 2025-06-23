@@ -11,6 +11,11 @@ from homeassistant.components.bluetooth import (
     async_discovered_service_info,
 )
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
 from .const import DOMAIN
 from .volcano_ble import VolcanoBLE
@@ -78,12 +83,6 @@ class VolcanoHybridConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def _build_schema(self, devices: list) -> Any:
         """Build the schema for the config flow."""
-        from homeassistant.helpers.selector import (
-            SelectSelector,
-            SelectSelectorConfig,
-            SelectSelectorMode,
-        )
-
         options = {device.address: device.name for device in devices}
         return {
             "address": SelectSelector(
