@@ -13,5 +13,5 @@
   "issue_tracker": "https://github.com/SavageNL/home-assistant-volcano-hybrid/issues",
   "loggers": ["volcano_hybrid"],
   "requirements": ["bleak>=0.20.2"],
-  "version": "1.0.1"
+  "version": "1.0.2"
 }
