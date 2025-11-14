@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from custom_components.volcano_hybrid.const import (
+    VOLCANO_HYBRID_MAX_TEMP,
+    VOLCANO_HYBRID_MIN_TEMP,
+)
+
 
 class VolcanoHybridDataStatusProvider:
     """Interface to retrieve Device data from the Data."""
@@ -200,21 +205,21 @@ class VolcanoHybridData:
     @current_auto_off_time.setter
     def current_auto_off_time(self, value: int) -> None:
         self._current_auto_off_time = value
-        
+
     @property
     def current_temp(self) -> int | None:
         """Get the current temp."""
         if self._current_temp is not None and self._current_temp > 0:
             return self._current_temp
         return None
-    
+
     @current_temp.setter
     def current_temp(self, value: int) -> None:
-        if 0 <= value <= 230:
+        if VOLCANO_HYBRID_MIN_TEMP <= value <= VOLCANO_HYBRID_MAX_TEMP:
             self._current_temp = value
         else:
             self._current_temp = None
-    
+
     def get(self, key: str) -> Any | None:
         """Get the value of the specified key."""
         return getattr(self, key)

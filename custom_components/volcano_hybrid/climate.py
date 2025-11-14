@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .const import VOLCANO_HYBRID_MAX_TEMP, VOLCANO_HYBRID_MIN_DISPLAY_TEMP
 from .coordinator import VolcanoHybridCoordinator
 from .volcano_ble import VolcanoSensor
 
@@ -54,8 +55,8 @@ class VolcanyHybridClimate(CoordinatorEntity, ClimateEntity):
         self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
         self._attr_fan_modes = ["off", "on"]
         self._attr_swing_modes = []
-        self._attr_min_temp = 40
-        self._attr_max_temp = 230
+        self._attr_min_temp = VOLCANO_HYBRID_MIN_DISPLAY_TEMP
+        self._attr_max_temp = VOLCANO_HYBRID_MAX_TEMP
         self._attr_target_temperature_step = 1
         self._attr_attribution = "Data provided by Volcano Hybrid"
         self._attr_supported_features = (
