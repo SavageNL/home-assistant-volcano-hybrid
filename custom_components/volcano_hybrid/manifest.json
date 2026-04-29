@@ -12,6 +12,6 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/SavageNL/home-assistant-volcano-hybrid/issues",
   "loggers": ["volcano_hybrid"],
-  "requirements": ["bleak>=0.20.2"],
-  "version": "1.0.2"
+  "requirements": ["bleak>=0.20.2", "bleak-retry-connector>=3.0.2"],
+  "version": "1.0.3"
 }

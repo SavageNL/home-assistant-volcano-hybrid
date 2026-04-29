@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING, TypeVar
 
 from bleak import BleakClient, BleakError, BleakGATTCharacteristic, BLEDevice
 from bleak.backends.service import BleakGATTService
+from bleak_retry_connector import (
+    BleakNotFoundError,
+    establish_connection,
+)
 from habluetooth import BluetoothServiceInfoBleak
 
 from .volcano_hybrid_data import VolcanoHybridData, VolcanoHybridDataStatusProvider
@@ -128,23 +132,48 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         return self.data
 
     async def _ensure_client_connected(self) -> bool:
-        """Ensure the BLE client is initialized and connected."""
-        try:
-            if not self.device:
-                _LOGGER.error("No last service info available, unable to connect")
-                return False
+        """Ensure the BLE client is initialized and connected.
 
-            if not self.client:
-                self.client = BleakClient(self.device, self._disconnected)
-            if not self.client.is_connected:
-                _LOGGER.debug("Connecting to BLE device at %s", self.device.address)
-                await self.client.connect()
-                self._after_data_updated()
-                await self._async_read_and_subscribe_all()
+        Uses bleak_retry_connector.establish_connection() so connection
+        attempts get retry/backoff behavior tuned for HA's bluetooth stack
+        (the proxy fleet, GATT contention, transient disconnects). A
+        previously-disconnected client is replaced by a fresh connected
+        one — never reused — which avoids "BleakClient.connect() called
+        without bleak-retry-connector" warnings from habluetooth.
+        """
+        if not self.device:
+            _LOGGER.error("No last service info available, unable to connect")
+            return False
+
+        if self.is_connected:
+            self._determine_connected_device()
+            return True
+
+        try:
+            _LOGGER.debug("Connecting to BLE device at %s", self.device.address)
+            self.client = await establish_connection(
+                BleakClient,
+                self.device,
+                "Volcano Hybrid",
+                disconnected_callback=self._disconnected,
+            )
+        except BleakNotFoundError as err:
+            _LOGGER.debug("BLE device not found while connecting: %s", err)
+            await self.async_disconnect()
+            return False
         except BleakError as err:
             _LOGGER.debug("Failed to connect to BLE device: %s", err)
             await self.async_disconnect()
             return False
+
+        self._after_data_updated()
+        try:
+            await self._async_read_and_subscribe_all()
+        except BleakError as err:
+            _LOGGER.debug("Failed to read/subscribe after connect: %s", err)
+            await self.async_disconnect()
+            return False
+
         self._determine_connected_device()
         return True
 
