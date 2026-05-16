@@ -150,12 +150,12 @@ class VolcanoHybridData:
         return self.set_temp_write if self.set_temp_write is not None else self.set_temp
 
     @property
-    def set_temp(self) -> bool | None:
+    def set_temp(self) -> int | None:
         """Return the current set_temp state."""
         return self._set_temp
 
     @set_temp.setter
-    def set_temp(self, value: bool) -> None:
+    def set_temp(self, value: int) -> None:
         """Set the current set_temp state (and clears the write if they match)."""
         self._set_temp = value
         if self.set_temp_write is not None and self.set_temp == self.set_temp_write:
