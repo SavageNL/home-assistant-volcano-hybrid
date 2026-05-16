@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, TypeVar
 from bleak import BleakClient, BleakError, BleakGATTCharacteristic, BLEDevice
 from bleak.backends.service import BleakGATTService
 from bleak_retry_connector import (
+    BleakClientWithServiceCache,
     BleakNotFoundError,
     establish_connection,
 )
@@ -144,7 +145,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         try:
             _LOGGER.debug("Connecting to BLE device at %s", self.device.address)
             self.client = await establish_connection(
-                BleakClient,
+                BleakClientWithServiceCache,
                 self.device,
                 "Volcano Hybrid",
                 disconnected_callback=self._disconnected,
@@ -181,6 +182,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     def _disconnected(self, client: BleakClient) -> None:
         """Handle disconnection events."""
         _LOGGER.debug("Disconnected from BLE device at %s", client.address)
+        self.client = None
         self._after_data_updated()
 
     async def _async_read_and_subscribe_all(self) -> VolcanoHybridData:
