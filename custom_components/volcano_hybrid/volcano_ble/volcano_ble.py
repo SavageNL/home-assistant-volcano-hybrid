@@ -132,15 +132,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         return self.data
 
     async def _ensure_client_connected(self) -> bool:
-        """Ensure the BLE client is initialized and connected.
-
-        Uses bleak_retry_connector.establish_connection() so connection
-        attempts get retry/backoff behavior tuned for HA's bluetooth stack
-        (the proxy fleet, GATT contention, transient disconnects). A
-        previously-disconnected client is replaced by a fresh connected
-        one — never reused — which avoids "BleakClient.connect() called
-        without bleak-retry-connector" warnings from habluetooth.
-        """
+        """Ensure the BLE client is initialized and connected."""
         if not self.device:
             _LOGGER.error("No last service info available, unable to connect")
             return False
