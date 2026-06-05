@@ -1,6 +1,6 @@
 colorlog==6.10.1
 homeassistant==2026.5.0
 pip>=21.3.1
-ruff==0.15.1
+ruff==0.15.16
 habluetooth>=5.11.1
 bleak~=2.1.1
