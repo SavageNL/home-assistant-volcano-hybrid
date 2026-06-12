@@ -352,98 +352,107 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         self._after_data_updated()
         self._after_device_updated()
 
-    async def async_set_fan(self, on: bool) -> None:
+    async def async_set_fan(self, on: bool) -> bool:
         """Set the fan on or off."""
         _LOGGER.debug("Setting fan to %s", on)
-        await self._write_gatt(
+        written = await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_FAN_ON if on else CHARACTERISTIC_FAN_OFF,
             bytearray([int(on)]),
         )
         self.data.fan_write = on
         self._after_data_updated()
+        return written
 
-    async def async_set_heater(self, on: bool) -> None:
+    async def async_set_heater(self, on: bool) -> bool:
         """Set the heater on or off."""
         _LOGGER.debug("Setting heater to %s", on)
-        await self._write_gatt(
+        written = await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_HEATER_ON if on else CHARACTERISTIC_HEATER_OFF,
             bytearray([int(on)]),
         )
         self.data.heater_write = on
         self._after_data_updated()
+        return written
 
-    async def async_set_target_temperature(self, target: float) -> None:
+    async def async_set_target_temperature(self, target: float) -> bool:
         """Set the target temperature."""
         _LOGGER.debug("Setting temperature to %s", target)
-        await self._write_gatt(
+        written = await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_SET_TEMP,
             bytearray(int.to_bytes(int(target * 10), 2, "little")),
         )
-        await self._async_read_set_temp()
+        if written:
+            await self._async_read_set_temp()
         self.data.set_temp_write = int(target)
         self._after_data_updated()
+        return written
 
-    async def async_set_showing_celsius(self, on: bool) -> None:
+    async def async_set_showing_celsius(self, on: bool) -> bool:
         """Set the toggle for showing Celsius."""
         if on:
-            await self._write_register_2(MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA)
-        else:
-            await self._write_register_2(65536 + MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA)
+            return await self._write_register_2(MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA)
+        return await self._write_register_2(
+            65536 + MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA
+        )
 
-    async def async_set_display_on_cooling(self, on: bool) -> None:
+    async def async_set_display_on_cooling(self, on: bool) -> bool:
         """Set the toggle for display on cooling."""
         if on:
-            await self._write_register_2(MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING)
-        else:
-            await self._write_register_2(
-                65536 + MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING
+            return await self._write_register_2(
+                MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING
             )
+        return await self._write_register_2(
+            65536 + MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING
+        )
 
-    async def _write_register_2(self, mask: int) -> None:
+    async def _write_register_2(self, mask: int) -> bool:
         """Write to register 2."""
-        await self._write_gatt(
+        return await self._write_gatt(
             SERVICE3_UUID,
             CHARACTERISTIC_PRJ2V,
             bytearray(int.to_bytes(mask, 4, "little")),
         )
 
-    async def async_set_vibration(self, on: bool) -> None:
+    async def async_set_vibration(self, on: bool) -> bool:
         """Set the toggle for vibration."""
         if on:
-            await self._write_register_3(MASK_PRJSTAT3_VOLCANO_VIBRATION)
-        else:
-            await self._write_register_3(65536 + MASK_PRJSTAT3_VOLCANO_VIBRATION)
+            return await self._write_register_3(MASK_PRJSTAT3_VOLCANO_VIBRATION)
+        return await self._write_register_3(65536 + MASK_PRJSTAT3_VOLCANO_VIBRATION)
 
-    async def _write_register_3(self, mask: int) -> None:
-        """Write to register 2."""
-        await self._write_gatt(
+    async def _write_register_3(self, mask: int) -> bool:
+        """Write to register 3."""
+        return await self._write_gatt(
             SERVICE3_UUID,
             CHARACTERISTIC_PRJ3V,
             bytearray(int.to_bytes(mask, 4, "little")),
         )
 
-    async def async_set_shut_off(self, minutes: int) -> None:
-        """Set the toggle for shut off."""
-        await self._write_gatt(
+    async def async_set_shut_off(self, minutes: int) -> bool:
+        """Set the shut off time in minutes."""
+        written = await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_SHUT_OFF,
             bytearray(int.to_bytes(minutes * 60, 2, "little")),
         )
-        self.data.shut_off = minutes
-        self._after_data_updated()
+        if written:
+            self.data.shut_off = minutes
+            self._after_data_updated()
+        return written
 
-    async def async_set_led_brightness(self, brightness: int) -> None:
+    async def async_set_led_brightness(self, brightness: int) -> bool:
         """Set the LED brightness."""
-        await self._write_gatt(
+        written = await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_LED_BRIGHTNESS,
             bytearray(int.to_bytes(brightness, 2, "little")),
         )
-        self.data.led_brightness = brightness
-        self._after_data_updated()
+        if written:
+            self.data.led_brightness = brightness
+            self._after_data_updated()
+        return written
 
     async def async_disconnect(self) -> None:
         """Disconnect from the Volcano device."""
@@ -455,11 +464,11 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
 
     async def _async_read_and_subscribe(
         self,
-        service: str,
+        service_uuid: str,
         characteristic: str,
         value_change_callback: Callable[[bytearray], Awaitable[T] | T],
         subscribe: bool,
-    ) -> T:
+    ) -> T | None:
         """Read a characteristic from the BLE device."""
         if not self.is_connected:
             return None
@@ -470,7 +479,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             else:
                 value_change_callback(data)
 
-        service: BleakGATTService = self.client.services.get_service(service)
+        service: BleakGATTService = self.client.services.get_service(service_uuid)
         char = service.get_characteristic(characteristic)
         current_value = await self.client.read_gatt_char(char)
         if (
@@ -492,20 +501,21 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
 
     async def _write_gatt(
         self,
-        service: str,
+        service_uuid: str,
         characteristic: str,
         value: bytearray,
-    ) -> None:
-        """Write to the GATT characteristic."""
+    ) -> bool:
+        """Write to the GATT characteristic, returns whether it was written."""
         if not await self._ensure_client_connected():
-            return
+            return False
 
-        service: BleakGATTService = self.client.services.get_service(service)
+        service: BleakGATTService = self.client.services.get_service(service_uuid)
         char = service.get_characteristic(characteristic)
         await self.client.write_gatt_char(
             char,
             value,
         )
+        return True
 
     async def _async_try_ensure_written_values(self) -> None:
         """Ensure that the pending writes are written to the device."""

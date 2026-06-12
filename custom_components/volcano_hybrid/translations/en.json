@@ -21,5 +21,13 @@
                 "description": "Choose a device to set up"
             }
         }
+    },
+    "exceptions": {
+        "command_failed": {
+            "message": "Sending the command to the Volcano Hybrid failed"
+        },
+        "not_connected": {
+            "message": "Could not send the command, the Volcano Hybrid is not connected"
+        }
     }
 }

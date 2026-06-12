@@ -17,6 +17,8 @@ from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
 from .entity import VolcanoHybridEntity
 from .volcano_ble import VolcanoSensor
 
+PARALLEL_UPDATES = 0
+
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 

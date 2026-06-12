@@ -21,5 +21,13 @@
       "already_in_progress": "Configuration flow is already in progress",
       "already_configured": "Device is already configured"
     }
+  },
+  "exceptions": {
+    "not_connected": {
+      "message": "Could not send the command, the Volcano Hybrid is not connected"
+    },
+    "command_failed": {
+      "message": "Sending the command to the Volcano Hybrid failed"
+    }
   }
 }

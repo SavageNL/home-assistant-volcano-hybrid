@@ -15,6 +15,8 @@ from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
 from .entity import VolcanoHybridEntity
 from .volcano_ble import VolcanoSensor
 
+PARALLEL_UPDATES = 0
+
 SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
     VolcanoSensor.AUTO_SHUTDOWN: BinarySensorEntityDescription(
         key=VolcanoSensor.AUTO_SHUTDOWN,

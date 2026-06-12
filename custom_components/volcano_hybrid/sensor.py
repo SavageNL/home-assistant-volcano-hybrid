@@ -20,6 +20,8 @@ from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
 from .entity import VolcanoHybridEntity
 from .volcano_ble import VolcanoSensor
 
+PARALLEL_UPDATES = 0
+
 SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
     VolcanoSensor.CURRENT_AUTO_OFF_TIME: SensorEntityDescription(
         key=VolcanoSensor.CURRENT_AUTO_OFF_TIME,
