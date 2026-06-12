@@ -71,7 +71,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         data_updated: Callable[[], None],
         device_updated: Callable[[], None],
         *,
-        device: BLEDevice = None,
+        device: BLEDevice | None = None,
     ) -> None:
         """Initialize VolcanoBLE."""
         super().__init__()
@@ -88,11 +88,12 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         """Check if the device is supported."""
         return (
             service_info.manufacturer_id == STORZ_BICKEL_MANUFACTURER_ID
+            and service_info.name is not None
             and "VOLCANO H" in service_info.name
         )
 
     @property
-    def rssi(self) -> int:
+    def rssi(self) -> int | None:
         """Get the device rssi."""
         return self.device_rssi
 
@@ -215,13 +216,11 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             )
             self.data.prv1_error = bool(prj1v & MASK_PRJSTAT1_VOLCANO_ERR)
 
-        (
-            await self._async_read_and_subscribe(
-                SERVICE3_UUID,
-                CHARACTERISTIC_PRJ1V,
-                _read_prj1v_inner,
-                subscribe=subscribe,
-            ),
+        await self._async_read_and_subscribe(
+            SERVICE3_UUID,
+            CHARACTERISTIC_PRJ1V,
+            _read_prj1v_inner,
+            subscribe=subscribe,
         )
 
     async def _async_read_initial_characteristics(self) -> None:

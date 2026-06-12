@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from custom_components.volcano_hybrid.const import (
-    VOLCANO_HYBRID_MAX_TEMP,
-    VOLCANO_HYBRID_MIN_TEMP,
-)
+from .const import VOLCANO_HYBRID_MAX_TEMP, VOLCANO_HYBRID_MIN_TEMP
 
 
 class VolcanoHybridDataStatusProvider:

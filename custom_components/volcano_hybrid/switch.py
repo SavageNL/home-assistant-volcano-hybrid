@@ -1,6 +1,8 @@
-"""Support for Volcano sensors."""
+"""Support for Volcano switches."""
 
 from __future__ import annotations
+
+from typing import Any
 
 from homeassistant.components.switch import (
     SwitchDeviceClass,
@@ -82,10 +84,10 @@ class VolcanoSwitchEntity(CoordinatorEntity, SwitchEntity):
         self._attr_is_on = self.coordinator.data.get(self._key)
         super()._handle_coordinator_update()
 
-    async def async_turn_on(self, **kwargs: any) -> None:
+    async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the entity on."""
         await getattr(self.coordinator, "set_" + self._key)(True)
 
-    async def async_turn_off(self, **kwargs: any) -> None:
+    async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the entity off."""
         await getattr(self.coordinator, "set_" + self._key)(False)

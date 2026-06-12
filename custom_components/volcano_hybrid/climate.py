@@ -1,4 +1,8 @@
-"""Sensors for Volcano Hybrid BLE device."""
+"""Climate entity for Volcano Hybrid BLE device."""
+
+from __future__ import annotations
+
+from typing import Any
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -7,7 +11,7 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -34,12 +38,12 @@ async def async_setup_entry(
     coordinator: VolcanoHybridCoordinator = config_entry.runtime_data
     async_add_entities(
         [
-            VolcanyHybridClimate(coordinator, "volcano"),
+            VolcanoHybridClimate(coordinator, "volcano"),
         ]
     )
 
 
-class VolcanyHybridClimate(CoordinatorEntity, ClimateEntity):
+class VolcanoHybridClimate(CoordinatorEntity, ClimateEntity):
     """Representation of a Volcano Hybrid climate."""
 
     def __init__(self, coordinator: VolcanoHybridCoordinator, key: str) -> None:
@@ -54,7 +58,6 @@ class VolcanyHybridClimate(CoordinatorEntity, ClimateEntity):
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
         self._attr_fan_modes = ["off", "on"]
-        self._attr_swing_modes = []
         self._attr_min_temp = VOLCANO_HYBRID_MIN_DISPLAY_TEMP
         self._attr_max_temp = VOLCANO_HYBRID_MAX_TEMP
         self._attr_target_temperature_step = 1
@@ -82,14 +85,14 @@ class VolcanyHybridClimate(CoordinatorEntity, ClimateEntity):
         self._attr_assumed_state = self.coordinator.data.is_assumed
         super()._handle_coordinator_update()
 
-    async def async_set_temperature(self, **kwargs: any) -> None:
-        """Set the HVAC mode."""
-        await self.coordinator.set_target_temperature(kwargs["temperature"])
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        """Set the target temperature."""
+        await self.coordinator.set_target_temperature(kwargs[ATTR_TEMPERATURE])
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set the HVAC mode."""
         await self.coordinator.set_heater(hvac_mode == HVACMode.HEAT)
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
-        """Set the HVAC mode."""
+        """Set the fan mode."""
         await self.coordinator.set_fan(fan_mode == "on")

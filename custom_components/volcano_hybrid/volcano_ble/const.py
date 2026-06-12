@@ -2,6 +2,9 @@
 
 from enum import StrEnum
 
+VOLCANO_HYBRID_MIN_TEMP = 0
+VOLCANO_HYBRID_MAX_TEMP = 230
+
 
 class VolcanoSensor(StrEnum):
     """Volcano sensor types."""

@@ -105,9 +105,8 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
         if not device:
             return
 
-        device_id = device.id
-        dr.async_get(self.hass).async_update_device(
-            device_id=device_id,
+        dev_reg.async_update_device(
+            device_id=device.id,
             serial_number=self.data.serial_number,
             sw_version=self.data.firmware_version,
             hw_version=self.data.bootloader_version,
