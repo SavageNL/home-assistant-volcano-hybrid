@@ -17,9 +17,8 @@ jobs:
       - uses: actions/checkout@v6.0.3
       - name: get properties
         id: manifest
-        uses: ActionsTools/read-json-action@main
-        with:
-          file_path: "custom_components/volcano_hybrid/manifest.json"
+        run: |
+          echo "version=$(jq -r .version custom_components/volcano_hybrid/manifest.json)" >> "$GITHUB_OUTPUT"
 
       - name: Remove Old draft
         env:
