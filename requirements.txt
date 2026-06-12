@@ -1,7 +1,7 @@
 colorlog==6.10.1
 homeassistant==2026.6.2
 pip>=21.3.1
-ruff==0.15.1
+ruff==0.15.17
 mypy==2.1.0
 pytest-homeassistant-custom-component==0.13.338
 # Pinned to the versions the homeassistant bluetooth component ships with,
