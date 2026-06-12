@@ -1,0 +1,97 @@
+rules:
+  # Bronze
+  action-setup:
+    status: exempt
+    comment: The integration does not register any service actions.
+  appropriate-polling:
+    status: done
+    comment: >-
+      The device pushes updates over BLE notifications; the 10 second
+      coordinator interval is only a reconnect/fallback poll.
+  brands: done
+  common-modules: done
+  config-flow: done
+  config-flow-test-coverage: done
+  dependency-transparency: done
+  docs-actions:
+    status: exempt
+    comment: The integration does not register any service actions.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  entity-event-setup: done
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure:
+    status: exempt
+    comment: >-
+      Devices are offered from live Bluetooth discovery, which already
+      proves the device exists and is in range; there are no credentials
+      to validate.
+  test-before-setup:
+    status: done
+    comment: >-
+      The first refresh attempts to connect. A device that is currently
+      out of range is allowed to set up and is connected automatically
+      once it is seen, as is usual for Bluetooth devices.
+  unique-config-entry: done
+
+  # Silver
+  action-exceptions: done
+  config-entry-unloading: done
+  docs-configuration-parameters:
+    status: exempt
+    comment: The integration has no options flow; there is nothing to configure.
+  docs-installation-parameters: done
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow:
+    status: exempt
+    comment: The device does not use any form of authentication.
+  test-coverage: done
+
+  # Gold
+  devices: done
+  diagnostics: done
+  discovery: done
+  discovery-update-info:
+    status: done
+    comment: >-
+      Every update fetches the latest BLEDevice for the configured address,
+      so connections follow the best available adapter/proxy.
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  dynamic-devices:
+    status: exempt
+    comment: A config entry represents exactly one Volcano Hybrid device.
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default: done
+  entity-translations: done
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow: done
+  repair-issues:
+    status: exempt
+    comment: There are no repairable issues for this integration.
+  stale-devices:
+    status: done
+    comment: >-
+      A config entry serves a single device; devices that no longer match
+      the configured address can be deleted via
+      async_remove_config_entry_device.
+
+  # Platinum
+  async-dependency: done
+  inject-websession:
+    status: exempt
+    comment: The integration communicates over Bluetooth only, no HTTP is used.
+  strict-typing: done

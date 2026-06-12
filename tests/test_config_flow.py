@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.volcano_hybrid.config_flow import VolcanoHybridConfigFlow
 from custom_components.volcano_hybrid.const import DOMAIN
 
 from . import VOLCANO_ADDRESS, VOLCANO_NAME, make_service_info
@@ -132,6 +133,19 @@ async def test_bluetooth_flow_not_supported(hass: HomeAssistant) -> None:
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "not_supported"
+
+
+async def test_bluetooth_confirm_without_discovery(hass: HomeAssistant) -> None:
+    """The confirm step aborts when there is no discovered device."""
+    flow = VolcanoHybridConfigFlow()
+    flow.hass = hass
+    flow.flow_id = "test"
+    flow.handler = DOMAIN
+
+    result = await flow.async_step_bluetooth_confirm()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_devices_found"
 
 
 async def test_bluetooth_flow_already_configured(hass: HomeAssistant) -> None:

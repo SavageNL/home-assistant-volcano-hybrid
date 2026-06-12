@@ -64,6 +64,31 @@ This means that updates from the device will trigger updates in Home Assistant i
 
 I might make that configurable at some point (if anyone wants it and asks for it, possibly).
 
+## Troubleshooting
+
+### The device is not discovered
+
+- Make sure the Volcano is plugged in; its Bluetooth stays available even when the heater and fan are off.
+- Make sure a [Bluetooth adapter or ESPHome Bluetooth proxy](https://www.home-assistant.io/integrations/bluetooth/) is set up in Home Assistant and within range of the device.
+- The official Storz & Bickel app (or any other Bluetooth client) may be holding the connection. Close the app and try again.
+
+### The entities show as unavailable
+
+The Bluetooth connection to the device was lost. The integration reconnects automatically as soon as the device is seen again; the diagnostic `Connected` binary sensor and `Signal strength` sensor (disabled by default) can help spot range issues. Pressing the `(Re)connect` button forces a new connection attempt.
+
+### Commands fail with "the Volcano Hybrid is not connected"
+
+The command could not be delivered because the device is currently disconnected. Wait for it to reconnect (or press the `(Re)connect` button) and try again.
+
+## Removing the integration
+
+This integration follows standard integration removal:
+
+1. Go to **Settings** → **Devices & services** and select the **Volcano Hybrid** integration.
+2. Open the three-dot menu of the config entry and select **Delete**.
+
+After removal the Volcano keeps working standalone; no settings on the device itself need to be reset. If you installed through HACS you can then also remove the repository from HACS.
+
 # Example usage
 
 - [Dashboard grid with shut-off timer and current states](#Dashboard-grid-with-shut-off-timer-and-current-states)
