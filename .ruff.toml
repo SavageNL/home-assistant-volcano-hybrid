@@ -26,6 +26,8 @@ ignore = [
 [lint.per-file-ignores]
 "tests/**" = [
     "S101", # Tests assert via assert statements
+    "PLR2004", # Tests compare against literal expected values
+    "PLR0913", # Parametrized tests take many fixtures and parameters
 ]
 
 [lint.flake8-pytest-style]
