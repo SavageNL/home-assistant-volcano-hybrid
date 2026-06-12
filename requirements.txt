@@ -6,7 +6,7 @@ mypy==2.1.0
 pytest-homeassistant-custom-component==0.13.338
 # Pinned to the versions the homeassistant bluetooth component ships with,
 # see homeassistant/components/bluetooth/manifest.json
-habluetooth==6.8.1
+habluetooth==6.8.3
 bleak==3.0.2
 bleak-retry-connector==4.6.1
 # Requirements of the bluetooth/usb components, needed to import the
