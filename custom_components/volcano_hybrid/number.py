@@ -21,8 +21,7 @@ PARALLEL_UPDATES = 0
 SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
     VolcanoSensor.SHUT_OFF: NumberEntityDescription(
         key=VolcanoSensor.SHUT_OFF,
-        name="Shut off time",
-        icon="mdi:timer-stop-outline",
+        translation_key=VolcanoSensor.SHUT_OFF,
         device_class=NumberDeviceClass.DURATION,
         entity_category=EntityCategory.CONFIG,
         mode=NumberMode.BOX,
@@ -34,8 +33,7 @@ SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
     ),
     VolcanoSensor.LED_BRIGHTNESS: NumberEntityDescription(
         key=VolcanoSensor.LED_BRIGHTNESS,
-        name="LED Brightness",
-        icon="mdi:brightness-5",
+        translation_key=VolcanoSensor.LED_BRIGHTNESS,
         entity_category=EntityCategory.CONFIG,
         mode=NumberMode.SLIDER,
         native_max_value=100,

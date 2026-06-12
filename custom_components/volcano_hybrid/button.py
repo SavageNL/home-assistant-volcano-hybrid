@@ -25,8 +25,7 @@ if TYPE_CHECKING:
 SENSOR_DESCRIPTIONS: dict[str, ButtonEntityDescription] = {
     VolcanoSensor.RECONNECT: ButtonEntityDescription(
         key=VolcanoSensor.RECONNECT,
-        name="(Re)connect",
-        icon="mdi:bluetooth-connect",
+        translation_key=VolcanoSensor.RECONNECT,
         device_class=ButtonDeviceClass.RESTART,
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,

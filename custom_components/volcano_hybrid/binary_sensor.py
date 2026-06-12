@@ -20,28 +20,27 @@ PARALLEL_UPDATES = 0
 SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
     VolcanoSensor.AUTO_SHUTDOWN: BinarySensorEntityDescription(
         key=VolcanoSensor.AUTO_SHUTDOWN,
-        name="Auto shutdown enabled",
-        icon="mdi:power",
+        translation_key=VolcanoSensor.AUTO_SHUTDOWN,
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
     VolcanoSensor.PRV1_ERROR: BinarySensorEntityDescription(
         key=VolcanoSensor.PRV1_ERROR,
-        name="Prv1 error",
+        translation_key=VolcanoSensor.PRV1_ERROR,
         entity_category=EntityCategory.DIAGNOSTIC,
         device_class=BinarySensorDeviceClass.PROBLEM,
         entity_registry_enabled_default=False,
     ),
     VolcanoSensor.PRV2_ERROR: BinarySensorEntityDescription(
         key=VolcanoSensor.PRV2_ERROR,
-        name="Prv2 error",
+        translation_key=VolcanoSensor.PRV2_ERROR,
         entity_category=EntityCategory.DIAGNOSTIC,
         device_class=BinarySensorDeviceClass.PROBLEM,
         entity_registry_enabled_default=False,
     ),
     VolcanoSensor.CONNECTED: BinarySensorEntityDescription(
         key=VolcanoSensor.CONNECTED,
-        name="Connected",
+        translation_key=VolcanoSensor.CONNECTED,
         entity_category=EntityCategory.DIAGNOSTIC,
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_registry_enabled_default=True,

@@ -1,0 +1,41 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "auto_shutdown": {
+        "default": "mdi:power"
+      }
+    },
+    "button": {
+      "reconnect": {
+        "default": "mdi:bluetooth-connect"
+      }
+    },
+    "number": {
+      "shut_off": {
+        "default": "mdi:timer-stop-outline"
+      },
+      "led_brightness": {
+        "default": "mdi:brightness-5"
+      }
+    },
+    "sensor": {
+      "current_auto_off_time": {
+        "default": "mdi:timer"
+      },
+      "current_on_time": {
+        "default": "mdi:timer"
+      },
+      "heat_time": {
+        "default": "mdi:timer"
+      }
+    },
+    "switch": {
+      "showing_celsius": {
+        "default": "mdi:temperature-celsius"
+      },
+      "vibration": {
+        "default": "mdi:vibrate"
+      }
+    }
+  }
+}

@@ -4,12 +4,22 @@
             "already_configured": "Device is already configured",
             "already_in_progress": "Configuration flow is already in progress",
             "no_devices_found": "No devices found on the network",
-            "not_supported": "Device not supported"
+            "not_supported": "Device not supported",
+            "reconfigure_successful": "Re-configuration was successful"
         },
         "flow_title": "{name}",
         "step": {
             "bluetooth_confirm": {
                 "description": "Do you want to set up {name}?"
+            },
+            "reconfigure": {
+                "data": {
+                    "address": "Device"
+                },
+                "data_description": {
+                    "address": "The Volcano Hybrid to use"
+                },
+                "description": "Choose a device to use for this entry"
             },
             "user": {
                 "data": {
@@ -19,6 +29,63 @@
                     "address": "The Volcano Hybrid to set up"
                 },
                 "description": "Choose a device to set up"
+            }
+        }
+    },
+    "entity": {
+        "binary_sensor": {
+            "auto_shutdown": {
+                "name": "Auto shutdown enabled"
+            },
+            "connected": {
+                "name": "Connected"
+            },
+            "prv1_error": {
+                "name": "Prv1 error"
+            },
+            "prv2_error": {
+                "name": "Prv2 error"
+            }
+        },
+        "button": {
+            "reconnect": {
+                "name": "(Re)connect"
+            }
+        },
+        "number": {
+            "led_brightness": {
+                "name": "LED Brightness"
+            },
+            "shut_off": {
+                "name": "Shut off time"
+            }
+        },
+        "sensor": {
+            "connected_addr": {
+                "name": "Connected address"
+            },
+            "current_auto_off_time": {
+                "name": "Auto off time"
+            },
+            "current_on_time": {
+                "name": "Current on time"
+            },
+            "heat_time": {
+                "name": "Total heat time"
+            },
+            "rssi": {
+                "name": "Signal strength"
+            }
+        },
+        "switch": {
+            "display_on_cooling": {
+                "name": "Display on when cooling"
+            },
+            "showing_celsius": {
+                "name": "Showing celsius"
+            },
+            "vibration": {
+                "name": "Vibration enabled"
             }
         }
     },

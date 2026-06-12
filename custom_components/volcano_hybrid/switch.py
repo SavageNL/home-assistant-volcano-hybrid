@@ -22,23 +22,21 @@ PARALLEL_UPDATES = 0
 SENSOR_DESCRIPTIONS: dict[str, SwitchEntityDescription] = {
     VolcanoSensor.SHOWING_CELSIUS: SwitchEntityDescription(
         key=VolcanoSensor.SHOWING_CELSIUS,
-        name="Showing celsius",
-        icon="mdi:temperature-celsius",
+        translation_key=VolcanoSensor.SHOWING_CELSIUS,
         device_class=SwitchDeviceClass.SWITCH,
         entity_category=EntityCategory.CONFIG,
         entity_registry_enabled_default=False,
     ),
     VolcanoSensor.DISPLAY_ON_COOLING: SwitchEntityDescription(
         key=VolcanoSensor.DISPLAY_ON_COOLING,
-        name="Display on when cooling",
+        translation_key=VolcanoSensor.DISPLAY_ON_COOLING,
         device_class=SwitchDeviceClass.SWITCH,
         entity_category=EntityCategory.CONFIG,
         entity_registry_enabled_default=False,
     ),
     VolcanoSensor.VIBRATION: SwitchEntityDescription(
         key=VolcanoSensor.VIBRATION,
-        name="Vibration enabled",
-        icon="mdi:vibrate",
+        translation_key=VolcanoSensor.VIBRATION,
         device_class=SwitchDeviceClass.SWITCH,
         entity_category=EntityCategory.CONFIG,
         entity_registry_enabled_default=False,

@@ -35,6 +35,36 @@ class VolcanoHybridConfigFlow(ConfigFlow, domain=DOMAIN):
         self._discovered_device: BluetoothServiceInfoBleak | None = None
         self._discovered_devices: dict[str, str] = {}
 
+    def _async_discover_devices(self, *, allowed_address: str | None = None) -> None:
+        """Collect supported devices that are not configured in another entry."""
+        current_addresses = self._async_current_ids(include_ignore=False)
+        for discovery_info in async_discovered_service_info(
+            self.hass, connectable=True
+        ):
+            address = discovery_info.address
+            if (
+                address in current_addresses and address != allowed_address
+            ) or address in self._discovered_devices:
+                continue
+            if VolcanoBLE.is_supported(discovery_info):
+                self._discovered_devices[address] = discovery_info.name
+
+    def _device_selection_schema(self) -> vol.Schema:
+        """Build a schema with a dropdown of the discovered devices."""
+        return vol.Schema(
+            {
+                vol.Required(CONF_ADDRESS): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=address, label=f"{name} ({address})")
+                            for address, name in self._discovered_devices.items()
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                )
+            }
+        )
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -48,36 +78,39 @@ class VolcanoHybridConfigFlow(ConfigFlow, domain=DOMAIN):
                 data={CONF_ADDRESS: address},
             )
 
-        current_addresses = self._async_current_ids(include_ignore=False)
-        for discovery_info in async_discovered_service_info(
-            self.hass, connectable=True
-        ):
-            address = discovery_info.address
-            if address in current_addresses or address in self._discovered_devices:
-                continue
-            if VolcanoBLE.is_supported(discovery_info):
-                self._discovered_devices[address] = discovery_info.name
-
+        self._async_discover_devices()
         if not self._discovered_devices:
             return self.async_abort(reason="no_devices_found")
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_ADDRESS): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(
-                                    value=address, label=f"{name} ({address})"
-                                )
-                                for address, name in self._discovered_devices.items()
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    )
-                }
-            ),
+            data_schema=self._device_selection_schema(),
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reconfiguration of an existing entry."""
+        entry = self._get_reconfigure_entry()
+        if user_input is not None:
+            address = user_input[CONF_ADDRESS]
+            if address != entry.unique_id:
+                await self.async_set_unique_id(address)
+                self._abort_if_unique_id_configured()
+            return self.async_update_reload_and_abort(
+                entry,
+                unique_id=address,
+                title=self._discovered_devices[address],
+                data={CONF_ADDRESS: address},
+            )
+
+        self._async_discover_devices(allowed_address=entry.data[CONF_ADDRESS])
+        if not self._discovered_devices:
+            return self.async_abort(reason="no_devices_found")
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self._device_selection_schema(),
         )
 
     async def async_step_bluetooth(

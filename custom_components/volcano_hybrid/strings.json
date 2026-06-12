@@ -11,6 +11,15 @@
           "address": "The Volcano Hybrid to set up"
         }
       },
+      "reconfigure": {
+        "description": "Choose a device to use for this entry",
+        "data": {
+          "address": "Device"
+        },
+        "data_description": {
+          "address": "The Volcano Hybrid to use"
+        }
+      },
       "bluetooth_confirm": {
         "description": "Do you want to set up {name}?"
       }
@@ -19,7 +28,65 @@
       "not_supported": "Device not supported",
       "no_devices_found": "No devices found on the network",
       "already_in_progress": "Configuration flow is already in progress",
-      "already_configured": "Device is already configured"
+      "already_configured": "Device is already configured",
+      "reconfigure_successful": "Re-configuration was successful"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "auto_shutdown": {
+        "name": "Auto shutdown enabled"
+      },
+      "prv1_error": {
+        "name": "Prv1 error"
+      },
+      "prv2_error": {
+        "name": "Prv2 error"
+      },
+      "connected": {
+        "name": "Connected"
+      }
+    },
+    "button": {
+      "reconnect": {
+        "name": "(Re)connect"
+      }
+    },
+    "number": {
+      "shut_off": {
+        "name": "Shut off time"
+      },
+      "led_brightness": {
+        "name": "LED Brightness"
+      }
+    },
+    "sensor": {
+      "current_auto_off_time": {
+        "name": "Auto off time"
+      },
+      "current_on_time": {
+        "name": "Current on time"
+      },
+      "heat_time": {
+        "name": "Total heat time"
+      },
+      "rssi": {
+        "name": "Signal strength"
+      },
+      "connected_addr": {
+        "name": "Connected address"
+      }
+    },
+    "switch": {
+      "showing_celsius": {
+        "name": "Showing celsius"
+      },
+      "display_on_cooling": {
+        "name": "Display on when cooling"
+      },
+      "vibration": {
+        "name": "Vibration enabled"
+      }
     }
   },
   "exceptions": {

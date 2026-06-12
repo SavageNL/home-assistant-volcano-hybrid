@@ -25,16 +25,14 @@ PARALLEL_UPDATES = 0
 SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
     VolcanoSensor.CURRENT_AUTO_OFF_TIME: SensorEntityDescription(
         key=VolcanoSensor.CURRENT_AUTO_OFF_TIME,
-        name="Auto off time",
-        icon="mdi:timer",
+        translation_key=VolcanoSensor.CURRENT_AUTO_OFF_TIME,
         device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTime.MINUTES,
     ),
     VolcanoSensor.CURRENT_ON_TIME: SensorEntityDescription(
         key=VolcanoSensor.CURRENT_ON_TIME,
-        name="Current on time",
-        icon="mdi:timer",
+        translation_key=VolcanoSensor.CURRENT_ON_TIME,
         device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTime.MINUTES,
@@ -42,8 +40,7 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
     ),
     VolcanoSensor.HEAT_TIME: SensorEntityDescription(
         key=VolcanoSensor.HEAT_TIME,
-        name="Total heat time",
-        icon="mdi:timer",
+        translation_key=VolcanoSensor.HEAT_TIME,
         device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.TOTAL_INCREASING,
         native_unit_of_measurement=UnitOfTime.MINUTES,
@@ -53,7 +50,7 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
     ),
     VolcanoSensor.RSSI: SensorEntityDescription(
         key=VolcanoSensor.RSSI,
-        name="Signal strength",
+        translation_key=VolcanoSensor.RSSI,
         device_class=SensorDeviceClass.SIGNAL_STRENGTH,
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
@@ -62,7 +59,7 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
     ),
     VolcanoSensor.CONNECTED_ADDR: SensorEntityDescription(
         key=VolcanoSensor.CONNECTED_ADDR,
-        name="Connected address",
+        translation_key=VolcanoSensor.CONNECTED_ADDR,
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
