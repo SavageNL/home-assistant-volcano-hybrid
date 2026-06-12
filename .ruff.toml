@@ -23,6 +23,11 @@ ignore = [
     "RUF012", # Entity _attr class attributes override instance variables, like HA core
 ]
 
+[lint.per-file-ignores]
+"tests/**" = [
+    "S101", # Tests assert via assert statements
+]
+
 [lint.flake8-pytest-style]
 fixture-parentheses = false
 
