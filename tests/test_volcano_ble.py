@@ -287,6 +287,63 @@ async def test_pending_writes_replayed_when_device_on() -> None:
     assert (CHARACTERISTIC_HEATER_ON, b"\x01") in client.written
 
 
+class ConfirmingClient(FakeBleakClient):
+    """
+    A client that confirms heater writes before the write call returns.
+
+    Real devices push the prj1v status notification as soon as the heater
+    toggles, which can arrive before the write acknowledgement.
+    """
+
+    async def write_gatt_char(self, char: FakeCharacteristic, value: bytearray) -> None:
+        """Record a write and confirm heater changes via notification."""
+        await super().write_gatt_char(char, value)
+        if char.uuid in (CHARACTERISTIC_HEATER_ON, CHARACTERISTIC_HEATER_OFF):
+            prj1v = MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE
+            if char.uuid == CHARACTERISTIC_HEATER_ON:
+                prj1v |= MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA
+            await self.notify(CHARACTERISTIC_PRJ1V, prj1v.to_bytes(2, "little"))
+
+    async def notify(self, characteristic: str, value: bytes) -> None:
+        """Push a notification for a characteristic, updating its value."""
+        self.values[characteristic] = value
+        await self.notify_callbacks[characteristic](
+            FakeCharacteristic(characteristic), bytearray(value)
+        )
+
+
+async def test_physical_turn_on_is_not_reverted() -> None:
+    """
+    Turning the device on at the device is not undone by an old command.
+
+    Regression test: the off command was confirmed by a notification before
+    the write tracking was recorded, leaving a pending "heater off" write
+    that was replayed when the user later turned the device on physically.
+    """
+    client = ConfirmingClient(default_values())  # heater and fan on
+    volcano, _, _ = await connect(client)
+
+    # The user turns the heater off through Home Assistant
+    assert await volcano.async_set_heater(False)
+    assert volcano.data.heater is False
+    assert not volcano.data.heater_needs_write
+
+    # The user turns the heater back on with the button on the device
+    prj1v_on = (
+        MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA | MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE
+    )
+    await client.notify(CHARACTERISTIC_PRJ1V, prj1v_on.to_bytes(2, "little"))
+    assert volcano.data.heater is True
+
+    # The next update cycle must not replay the old off command
+    client.written.clear()
+    assert volcano.device is not None
+    await volcano.async_manual_update(volcano.device)
+
+    assert (CHARACTERISTIC_HEATER_OFF, b"\x00") not in client.written
+    assert volcano.data.heater_state is True
+
+
 async def test_write_fails_without_device() -> None:
     """Commands report failure when there is no device to connect to."""
     volcano = VolcanoBLE(lambda: None, lambda: None)

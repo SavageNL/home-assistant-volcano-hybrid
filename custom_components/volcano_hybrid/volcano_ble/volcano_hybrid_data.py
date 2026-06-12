@@ -61,9 +61,9 @@ class VolcanoHybridData:
         self.vibration: bool | None = None
 
         # Attributes that will be set frequently and which we want to track being set
-        self.set_temp_write: int | None = None
-        self.heater_write: bool | None = None
-        self.fan_write: bool | None = None
+        self._set_temp_write: int | None = None
+        self._heater_write: bool | None = None
+        self._fan_write: bool | None = None
 
     @property
     def is_assumed(self) -> bool:
@@ -84,6 +84,36 @@ class VolcanoHybridData:
         self.heater_write = None
         self.fan_write = None
         self.set_temp_write = None
+
+    @property
+    def fan_write(self) -> bool | None:
+        """Return the pending fan write."""
+        return self._fan_write
+
+    @fan_write.setter
+    def fan_write(self, value: bool | None) -> None:
+        """Set the pending fan write, dropping it when already confirmed."""
+        self._fan_write = None if value == self._fan else value
+
+    @property
+    def heater_write(self) -> bool | None:
+        """Return the pending heater write."""
+        return self._heater_write
+
+    @heater_write.setter
+    def heater_write(self, value: bool | None) -> None:
+        """Set the pending heater write, dropping it when already confirmed."""
+        self._heater_write = None if value == self._heater else value
+
+    @property
+    def set_temp_write(self) -> int | None:
+        """Return the pending set_temp write."""
+        return self._set_temp_write
+
+    @set_temp_write.setter
+    def set_temp_write(self, value: int | None) -> None:
+        """Set the pending set_temp write, dropping it when already confirmed."""
+        self._set_temp_write = None if value == self._set_temp else value
 
     @property
     def fan_state(self) -> bool | None:

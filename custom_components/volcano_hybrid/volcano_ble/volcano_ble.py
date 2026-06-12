@@ -354,30 +354,37 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     async def async_set_fan(self, on: bool) -> bool:
         """Set the fan on or off."""
         _LOGGER.debug("Setting fan to %s", on)
+        # Track the write before sending it, so the device notification that
+        # confirms it cannot race ahead and leave the write pending forever.
+        self.data.fan_write = on
         written = await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_FAN_ON if on else CHARACTERISTIC_FAN_OFF,
             bytearray([int(on)]),
         )
-        self.data.fan_write = on
         self._after_data_updated()
         return written
 
     async def async_set_heater(self, on: bool) -> bool:
         """Set the heater on or off."""
         _LOGGER.debug("Setting heater to %s", on)
+        # Track the write before sending it, so the device notification that
+        # confirms it cannot race ahead and leave the write pending forever.
+        self.data.heater_write = on
         written = await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_HEATER_ON if on else CHARACTERISTIC_HEATER_OFF,
             bytearray([int(on)]),
         )
-        self.data.heater_write = on
         self._after_data_updated()
         return written
 
     async def async_set_target_temperature(self, target: float) -> bool:
         """Set the target temperature."""
         _LOGGER.debug("Setting temperature to %s", target)
+        # Track the write before sending it, so the device notification that
+        # confirms it cannot race ahead and leave the write pending forever.
+        self.data.set_temp_write = int(target)
         written = await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_SET_TEMP,
@@ -385,7 +392,6 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         )
         if written:
             await self._async_read_set_temp()
-        self.data.set_temp_write = int(target)
         self._after_data_updated()
         return written
 

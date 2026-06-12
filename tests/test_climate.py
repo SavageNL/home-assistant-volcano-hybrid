@@ -22,6 +22,7 @@ from homeassistant.const import (
     ATTR_ASSUMED_STATE,
     ATTR_ENTITY_ID,
     ATTR_TEMPERATURE,
+    STATE_UNAVAILABLE,
 )
 from homeassistant.exceptions import HomeAssistantError
 
@@ -41,7 +42,7 @@ async def test_climate_state(
     entity_id = get_entity_id(hass, "climate", "volcano")
     state = hass.states.get(entity_id)
     assert state is not None
-    assert state.state == HVACMode.OFF
+    assert state.state == STATE_UNAVAILABLE
 
     mock_volcano.connected = True
     data = mock_volcano.data
@@ -100,6 +101,10 @@ async def test_climate_services(
     """The climate services send the matching device commands."""
     entity_id = get_entity_id(hass, "climate", "volcano")
 
+    mock_volcano.connected = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
     await hass.services.async_call(
         CLIMATE_DOMAIN,
         SERVICE_SET_TEMPERATURE,
@@ -140,6 +145,9 @@ async def test_climate_command_not_delivered(
 ) -> None:
     """A command that cannot be delivered raises a translated error."""
     entity_id = get_entity_id(hass, "climate", "volcano")
+    mock_volcano.connected = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
     mock_volcano.write_result = False
 
     with pytest.raises(HomeAssistantError) as err:
@@ -159,6 +167,9 @@ async def test_climate_command_ble_error(
 ) -> None:
     """A BLE failure while sending a command raises a translated error."""
     entity_id = get_entity_id(hass, "climate", "volcano")
+    mock_volcano.connected = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
     mock_volcano.error = BleakError("boom")
 
     with pytest.raises(HomeAssistantError) as err:

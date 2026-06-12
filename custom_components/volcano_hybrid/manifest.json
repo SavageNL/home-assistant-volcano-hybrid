@@ -21,6 +21,7 @@
   "loggers": [
     "volcano_hybrid"
   ],
+  "quality_scale": "platinum",
   "requirements": [
     "bleak>=2.1.1",
     "bleak-retry-connector>=4.6.0"

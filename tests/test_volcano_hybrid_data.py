@@ -46,6 +46,32 @@ def test_pending_write_needs_retry() -> None:
     assert not data.is_assumed
 
 
+def test_pending_write_dropped_when_already_confirmed() -> None:
+    """
+    A write matching the confirmed state never becomes pending.
+
+    A pending write that matches the device state would otherwise linger and
+    be replayed later, e.g. turning the device off right after the user turns
+    it on with the device button.
+    """
+    data = FakeVolcanoBLE().data
+    data.heater = False
+    data.heater_write = False
+    assert data.heater_write is None
+    assert not data.heater_needs_write
+    assert not data.is_assumed
+
+    data.fan = True
+    data.fan_write = True
+    assert data.fan_write is None
+    assert not data.fan_needs_write
+
+    data.set_temp = 190
+    data.set_temp_write = 190
+    assert data.set_temp_write is None
+    assert not data.set_temp_needs_write
+
+
 def test_is_on() -> None:
     """The device is on when the fan or the heater runs."""
     data = FakeVolcanoBLE().data
