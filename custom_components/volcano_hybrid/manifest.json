@@ -15,6 +15,7 @@
     "bluetooth_adapters"
   ],
   "documentation": "https://github.com/SavageNL/home-assistant-volcano-hybrid",
+  "integration_type": "device",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/SavageNL/home-assistant-volcano-hybrid/issues",
   "loggers": [

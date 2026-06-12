@@ -23,14 +23,21 @@ from .volcano_ble import VolcanoBLE, VolcanoHybridData
 
 _LOGGER = logging.getLogger(__name__)
 
+type VolcanoHybridConfigEntry = ConfigEntry[VolcanoHybridCoordinator]
+
 
 class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
-    """My custom coordinator."""
+    """Coordinator that maintains the BLE connection and pushes device updates."""
+
+    config_entry: VolcanoHybridConfigEntry
 
     def __init__(
-        self, hass: HomeAssistant, config_entry: ConfigEntry, address: str
+        self,
+        hass: HomeAssistant,
+        config_entry: VolcanoHybridConfigEntry,
+        address: str,
     ) -> None:
-        """Initialize my coordinator."""
+        """Initialize the coordinator."""
         super().__init__(
             hass,
             _LOGGER,

@@ -15,6 +15,9 @@
                 "data": {
                     "address": "Device"
                 },
+                "data_description": {
+                    "address": "The Volcano Hybrid to set up"
+                },
                 "description": "Choose a device to set up"
             }
         }

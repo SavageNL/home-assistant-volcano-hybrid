@@ -8,7 +8,6 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     EntityCategory,
@@ -16,9 +15,9 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import VolcanoHybridCoordinator
+from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
+from .entity import VolcanoHybridEntity
 from .volcano_ble import VolcanoSensor
 
 SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
@@ -29,7 +28,6 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTime.MINUTES,
-        has_entity_name=True,
     ),
     VolcanoSensor.CURRENT_ON_TIME: SensorEntityDescription(
         key=VolcanoSensor.CURRENT_ON_TIME,
@@ -39,7 +37,6 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTime.MINUTES,
         entity_registry_enabled_default=False,
-        has_entity_name=True,
     ),
     VolcanoSensor.HEAT_TIME: SensorEntityDescription(
         key=VolcanoSensor.HEAT_TIME,
@@ -51,7 +48,6 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         suggested_unit_of_measurement=UnitOfTime.HOURS,
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
-        has_entity_name=True,
     ),
     VolcanoSensor.RSSI: SensorEntityDescription(
         key=VolcanoSensor.RSSI,
@@ -59,7 +55,6 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         device_class=SensorDeviceClass.SIGNAL_STRENGTH,
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
-        has_entity_name=True,
         native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
         entity_registry_enabled_default=False,
     ),
@@ -67,7 +62,6 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         key=VolcanoSensor.CONNECTED_ADDR,
         name="Connected address",
         entity_category=EntityCategory.DIAGNOSTIC,
-        has_entity_name=True,
         entity_registry_enabled_default=False,
     ),
 }
@@ -75,11 +69,11 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: VolcanoHybridConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Volcano BLE sensors."""
-    coordinator: VolcanoHybridCoordinator = entry.runtime_data
+    coordinator = entry.runtime_data
 
     async_add_entities(
         [
@@ -94,7 +88,7 @@ async def async_setup_entry(
     )
 
 
-class VolcanoSensorEntity(CoordinatorEntity, SensorEntity):
+class VolcanoSensorEntity(VolcanoHybridEntity, SensorEntity):
     """Representation of a Volcano sensor."""
 
     def __init__(
@@ -105,22 +99,11 @@ class VolcanoSensorEntity(CoordinatorEntity, SensorEntity):
         always_available: bool = False,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self.coordinator = coordinator
-        self.entity_description = SENSOR_DESCRIPTIONS[key]
-        self._key = key
-        self._attr_unique_id = f"{coordinator.address}-{key}"
-        self._attr_device_info = coordinator.device_info
-        self._always_available = always_available
-        self._attr_attribution = "Data provided by Volcano Hybrid"
+        super().__init__(
+            coordinator, SENSOR_DESCRIPTIONS[key], always_available=always_available
+        )
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        new_value = self.coordinator.data.get(self._key)
-        self._attr_native_value = new_value
+        self._attr_native_value = self.coordinator.data.get(self._key)
         super()._handle_coordinator_update()
-
-    @property
-    def available(self) -> bool:
-        """Determine if the entity is available."""
-        return self._always_available or super().available

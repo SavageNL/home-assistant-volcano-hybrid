@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -10,65 +10,56 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACMode,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import VOLCANO_HYBRID_MAX_TEMP, VOLCANO_HYBRID_MIN_DISPLAY_TEMP
-from .coordinator import VolcanoHybridCoordinator
+from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
+from .entity import VolcanoHybridEntity
 from .volcano_ble import VolcanoSensor
 
 SENSOR_DESCRIPTIONS: dict[str, ClimateEntityDescription] = {
     VolcanoSensor.VOLCANO: ClimateEntityDescription(
         key=VolcanoSensor.VOLCANO,
         name=None,
-        has_entity_name=True,
     ),
 }
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: VolcanoHybridConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up sensors for Volcano Hybrid."""
-    coordinator: VolcanoHybridCoordinator = config_entry.runtime_data
+    """Set up the climate entity for Volcano Hybrid."""
+    coordinator = config_entry.runtime_data
     async_add_entities(
         [
-            VolcanoHybridClimate(coordinator, "volcano"),
+            VolcanoHybridClimate(coordinator, VolcanoSensor.VOLCANO),
         ]
     )
 
 
-class VolcanoHybridClimate(CoordinatorEntity, ClimateEntity):
+class VolcanoHybridClimate(VolcanoHybridEntity, ClimateEntity):
     """Representation of a Volcano Hybrid climate."""
+
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_hvac_modes: ClassVar[list[HVACMode]] = [HVACMode.OFF, HVACMode.HEAT]
+    _attr_fan_modes: ClassVar[list[str]] = ["off", "on"]
+    _attr_min_temp = VOLCANO_HYBRID_MIN_DISPLAY_TEMP
+    _attr_max_temp = VOLCANO_HYBRID_MAX_TEMP
+    _attr_target_temperature_step = 1
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.FAN_MODE
+        | ClimateEntityFeature.TURN_OFF
+        | ClimateEntityFeature.TURN_ON
+    )
 
     def __init__(self, coordinator: VolcanoHybridCoordinator, key: str) -> None:
         """Initialize the climate."""
-        super().__init__(coordinator)
-        self.coordinator = coordinator
-        self.entity_description = SENSOR_DESCRIPTIONS[key]
-        self._key = key
-        self._attr_unique_id = f"{coordinator.address}-{key}"
-        self._attr_device_info = coordinator.device_info
-
-        self._attr_temperature_unit = UnitOfTemperature.CELSIUS
-        self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
-        self._attr_fan_modes = ["off", "on"]
-        self._attr_min_temp = VOLCANO_HYBRID_MIN_DISPLAY_TEMP
-        self._attr_max_temp = VOLCANO_HYBRID_MAX_TEMP
-        self._attr_target_temperature_step = 1
-        self._attr_attribution = "Data provided by Volcano Hybrid"
-        self._attr_supported_features = (
-            ClimateEntityFeature.TARGET_TEMPERATURE
-            | ClimateEntityFeature.FAN_MODE
-            | ClimateEntityFeature.TURN_OFF
-            | ClimateEntityFeature.TURN_ON
-        )
-
+        super().__init__(coordinator, SENSOR_DESCRIPTIONS[key])
         self._attr_current_temperature = 0
         self._attr_target_temperature = 40
         self._attr_hvac_mode = HVACMode.OFF

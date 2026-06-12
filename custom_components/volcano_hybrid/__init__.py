@@ -1,28 +1,40 @@
 """Integration for Volcano Hybrid BLE device."""
 
-from homeassistant.config_entries import ConfigEntry
+from __future__ import annotations
+
+from homeassistant.const import CONF_ADDRESS, Platform
 from homeassistant.core import HomeAssistant
 
-from .coordinator import VolcanoHybridCoordinator
+from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
 
-PLATFORMS = ["binary_sensor", "button", "climate", "number", "sensor", "switch"]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.CLIMATE,
+    Platform.NUMBER,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(
+    hass: HomeAssistant, entry: VolcanoHybridConfigEntry
+) -> bool:
     """Set up Volcano Hybrid from a config entry."""
-    address = entry.data["address"]
-    coordinator = entry.runtime_data = VolcanoHybridCoordinator(
+    coordinator = VolcanoHybridCoordinator(
         hass,
         config_entry=entry,
-        address=address,
+        address=entry.data[CONF_ADDRESS],
     )
+    entry.runtime_data = coordinator
     await coordinator.async_config_entry_first_refresh()
 
-    # Forward entry setups to platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(
+    hass: HomeAssistant, entry: VolcanoHybridConfigEntry
+) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

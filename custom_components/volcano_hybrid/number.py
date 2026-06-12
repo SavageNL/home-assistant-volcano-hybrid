@@ -8,13 +8,12 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import VolcanoHybridCoordinator
+from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
+from .entity import VolcanoHybridEntity
 from .volcano_ble import VolcanoSensor
 
 SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
@@ -30,7 +29,6 @@ SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
         native_step=30,
         native_unit_of_measurement=UnitOfTime.MINUTES,
         entity_registry_enabled_default=False,
-        has_entity_name=True,
     ),
     VolcanoSensor.LED_BRIGHTNESS: NumberEntityDescription(
         key=VolcanoSensor.LED_BRIGHTNESS,
@@ -43,18 +41,17 @@ SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
         native_step=1,
         native_unit_of_measurement=PERCENTAGE,
         entity_registry_enabled_default=False,
-        has_entity_name=True,
     ),
 }
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: VolcanoHybridConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Volcano BLE sensors."""
-    coordinator: VolcanoHybridCoordinator = entry.runtime_data
+    """Set up the Volcano BLE numbers."""
+    coordinator = entry.runtime_data
 
     async_add_entities(
         [
@@ -64,20 +61,14 @@ async def async_setup_entry(
     )
 
 
-class VolcanoNumberEntity(CoordinatorEntity, NumberEntity):
-    """Representation of a Volcano sensor."""
+class VolcanoNumberEntity(VolcanoHybridEntity, NumberEntity):
+    """Representation of a Volcano number."""
 
     def __init__(
         self, coordinator: VolcanoHybridCoordinator, key: VolcanoSensor
     ) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self.coordinator = coordinator
-        self.entity_description = SENSOR_DESCRIPTIONS[key]
-        self._key = key
-        self._attr_unique_id = f"{coordinator.address}-{key}"
-        self._attr_device_info = coordinator.device_info
-        self._attr_attribution = "Data provided by Volcano Hybrid"
+        """Initialize the number."""
+        super().__init__(coordinator, SENSOR_DESCRIPTIONS[key])
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""

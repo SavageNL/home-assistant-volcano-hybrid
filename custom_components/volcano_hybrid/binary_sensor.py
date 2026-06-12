@@ -7,13 +7,12 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import VolcanoHybridCoordinator
+from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
+from .entity import VolcanoHybridEntity
 from .volcano_ble import VolcanoSensor
 
 SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
@@ -23,7 +22,6 @@ SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
         icon="mdi:power",
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
-        has_entity_name=True,
     ),
     VolcanoSensor.PRV1_ERROR: BinarySensorEntityDescription(
         key=VolcanoSensor.PRV1_ERROR,
@@ -31,7 +29,6 @@ SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
         entity_category=EntityCategory.DIAGNOSTIC,
         device_class=BinarySensorDeviceClass.PROBLEM,
         entity_registry_enabled_default=False,
-        has_entity_name=True,
     ),
     VolcanoSensor.PRV2_ERROR: BinarySensorEntityDescription(
         key=VolcanoSensor.PRV2_ERROR,
@@ -39,7 +36,6 @@ SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
         entity_category=EntityCategory.DIAGNOSTIC,
         device_class=BinarySensorDeviceClass.PROBLEM,
         entity_registry_enabled_default=False,
-        has_entity_name=True,
     ),
     VolcanoSensor.CONNECTED: BinarySensorEntityDescription(
         key=VolcanoSensor.CONNECTED,
@@ -47,18 +43,17 @@ SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
         entity_category=EntityCategory.DIAGNOSTIC,
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_registry_enabled_default=True,
-        has_entity_name=True,
     ),
 }
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: VolcanoHybridConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Volcano BLE sensors."""
-    coordinator: VolcanoHybridCoordinator = entry.runtime_data
+    """Set up the Volcano BLE binary sensors."""
+    coordinator = entry.runtime_data
     async_add_entities(
         [
             VolcanoBinarySensorEntity(coordinator, VolcanoSensor.AUTO_SHUTDOWN),
@@ -74,8 +69,8 @@ async def async_setup_entry(
     )
 
 
-class VolcanoBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
-    """Representation of a Volcano sensor."""
+class VolcanoBinarySensorEntity(VolcanoHybridEntity, BinarySensorEntity):
+    """Representation of a Volcano binary sensor."""
 
     def __init__(
         self,
@@ -85,23 +80,13 @@ class VolcanoBinarySensorEntity(CoordinatorEntity, BinarySensorEntity):
         always_available: bool = False,
         initial_value: bool | None = None,
     ) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self.coordinator = coordinator
-        self.entity_description = SENSOR_DESCRIPTIONS[key]
-        self._key = key
-        self._attr_unique_id = f"{coordinator.address}-{key}"
-        self._attr_device_info = coordinator.device_info
-        self._always_available = always_available
+        """Initialize the binary sensor."""
+        super().__init__(
+            coordinator, SENSOR_DESCRIPTIONS[key], always_available=always_available
+        )
         self._attr_is_on = initial_value
-        self._attr_attribution = "Data provided by Volcano Hybrid"
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self._attr_is_on = self.coordinator.data.get(self._key)
         super()._handle_coordinator_update()
-
-    @property
-    def available(self) -> bool:
-        """Determine if the entity is available."""
-        return self._always_available or super().available
