@@ -30,3 +30,6 @@ jobs:
 
       - name: Format
         run: python3 -m ruff format . --check
+
+      - name: Type check
+        run: python3 -m mypy --config-file mypy.ini

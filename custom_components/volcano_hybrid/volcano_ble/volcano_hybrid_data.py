@@ -11,7 +11,7 @@ class VolcanoHybridDataStatusProvider:
     """Interface to retrieve Device data from the Data."""
 
     @property
-    def rssi(self) -> int:
+    def rssi(self) -> int | None:
         """Get the device rssi."""
         raise NotImplementedError
 
@@ -40,7 +40,7 @@ class VolcanoHybridData:
         self.firmware_ble_version: str | None = None
         self.bootloader_version: str | None = None
         self.firmware: str | None = None
-        self._current_auto_off_time: int | None = None
+        self._current_auto_off_time: float | None = None
         self.heat_hours_changed: int | None = None
         self.heat_minutes_changed: int | None = None
         self.shut_off: int | None = None
@@ -77,7 +77,7 @@ class VolcanoHybridData:
     @property
     def is_on(self) -> bool:
         """Check if the device is on."""
-        return self.fan or self.heater
+        return bool(self.fan or self.heater)
 
     def clear_open_writes(self) -> None:
         """Remove all open writes."""
@@ -169,7 +169,7 @@ class VolcanoHybridData:
         return self.device.is_connected
 
     @property
-    def rssi(self) -> int:
+    def rssi(self) -> int | None:
         """The current rssi."""
         return self.device.rssi
 
@@ -186,22 +186,22 @@ class VolcanoHybridData:
         return self.heat_hours_changed * 60 + self.heat_minutes_changed
 
     @property
-    def current_auto_off_time(self) -> int | None:
+    def current_auto_off_time(self) -> float | None:
         """Get the current auto off time in minutes."""
         if self._current_auto_off_time and self._current_auto_off_time > 0:
             return self._current_auto_off_time
         return None
 
-    @property
-    def current_on_time(self) -> int | None:
-        """Get the current auto off time in minutes."""
-        if self.current_auto_off_time:
-            return self.shut_off - self.current_auto_off_time
-        return None
-
     @current_auto_off_time.setter
-    def current_auto_off_time(self, value: int) -> None:
+    def current_auto_off_time(self, value: float) -> None:
         self._current_auto_off_time = value
+
+    @property
+    def current_on_time(self) -> float | None:
+        """Get the current on time in minutes."""
+        if self.shut_off is None or self.current_auto_off_time is None:
+            return None
+        return self.shut_off - self.current_auto_off_time
 
     @property
     def current_temp(self) -> int | None:

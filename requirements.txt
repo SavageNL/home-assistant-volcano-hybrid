@@ -2,5 +2,7 @@ colorlog==6.10.1
 homeassistant==2026.5.0
 pip>=21.3.1
 ruff==0.15.1
+mypy==2.1.0
 habluetooth>=5.11.1
-bleak~=2.1.1
+bleak>=3.0.2
+bleak-retry-connector>=4.6.1

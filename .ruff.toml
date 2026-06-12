@@ -20,6 +20,7 @@ ignore = [
     "FBT003",
     "ARG001", # Indicates that required positional arguments are not used
     "ARG002", # Same for kwargs
+    "RUF012", # Entity _attr class attributes override instance variables, like HA core
 ]
 
 [lint.flake8-pytest-style]

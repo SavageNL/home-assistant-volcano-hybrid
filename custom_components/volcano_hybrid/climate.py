@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -47,8 +47,8 @@ class VolcanoHybridClimate(VolcanoHybridEntity, ClimateEntity):
     """Representation of a Volcano Hybrid climate."""
 
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_hvac_modes: ClassVar[list[HVACMode]] = [HVACMode.OFF, HVACMode.HEAT]
-    _attr_fan_modes: ClassVar[list[str]] = ["off", "on"]
+    _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
+    _attr_fan_modes = ["off", "on"]
     _attr_min_temp = VOLCANO_HYBRID_MIN_DISPLAY_TEMP
     _attr_max_temp = VOLCANO_HYBRID_MAX_TEMP
     _attr_target_temperature_step = 1

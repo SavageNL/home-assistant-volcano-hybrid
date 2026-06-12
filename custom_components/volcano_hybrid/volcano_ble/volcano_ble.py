@@ -5,10 +5,9 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from bleak import BleakClient, BleakError, BleakGATTCharacteristic, BLEDevice
-from bleak.backends.service import BleakGATTService
 from bleak_retry_connector import (
     BleakClientWithServiceCache,
     BleakNotFoundError,
@@ -22,7 +21,6 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 _LOGGER = logging.getLogger(__name__)
-T = TypeVar("T")
 STORZ_BICKEL_MANUFACTURER_ID = 1736
 
 # BLE service and characteristic placeholders
@@ -178,6 +176,8 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         This seems to be what bleak_esphome.backend.client.ESPHomeClient does
         in its constructor
         """
+        if self.device is None:
+            return
         self.device_connected_addr = self.device.details["source"]
 
     def _disconnected(self, client: BleakClient) -> None:
@@ -194,12 +194,11 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             _LOGGER.exception("Error reading characteristics")
         return self.data
 
-    async def _async_read_set_temp(self, *, subscribe: bool = False) -> int:
-        def _read_set_temp_inner(data: bytearray) -> int:
+    async def _async_read_set_temp(self, *, subscribe: bool = False) -> None:
+        def _read_set_temp_inner(data: bytearray) -> None:
             self.data.set_temp = int(int.from_bytes(data, "little") / 10)
-            return self.data.set_temp
 
-        return await self._async_read_and_subscribe(
+        await self._async_read_and_subscribe(
             SERVICE_UUID,
             CHARACTERISTIC_SET_TEMP,
             _read_set_temp_inner,
@@ -462,28 +461,39 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             self.client = None
             self._after_data_updated()
 
+    @staticmethod
+    def _get_characteristic(
+        client: BleakClient, service_uuid: str, characteristic: str
+    ) -> BleakGATTCharacteristic:
+        """Resolve a characteristic, raising BleakError when it is missing."""
+        service = client.services.get_service(service_uuid)
+        char = service.get_characteristic(characteristic) if service else None
+        if char is None:
+            msg = f"Characteristic {characteristic} not found"
+            raise BleakError(msg)
+        return char
+
     async def _async_read_and_subscribe(
         self,
         service_uuid: str,
         characteristic: str,
-        value_change_callback: Callable[[bytearray], Awaitable[T] | T],
+        value_change_callback: Callable[[bytearray], Awaitable[None] | None],
         subscribe: bool,
-    ) -> T | None:
+    ) -> None:
         """Read a characteristic from the BLE device."""
-        if not self.is_connected:
-            return None
+        client = self.client
+        if client is None or not client.is_connected:
+            return
 
         async def _async_call_callback(data: bytearray) -> None:
-            if inspect.iscoroutinefunction(value_change_callback):
-                await value_change_callback(data)
-            else:
-                value_change_callback(data)
+            result = value_change_callback(data)
+            if inspect.isawaitable(result):
+                await result
 
-        service: BleakGATTService = self.client.services.get_service(service_uuid)
-        char = service.get_characteristic(characteristic)
-        current_value = await self.client.read_gatt_char(char)
+        char = self._get_characteristic(client, service_uuid, characteristic)
+        current_value = await client.read_gatt_char(char)
         if (
-            subscribe and self.is_connected
+            subscribe and client.is_connected
         ):  # We just awaited a read, we could be disconnected now
             try:
 
@@ -493,11 +503,11 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
                     await _async_call_callback(data)
                     self._after_data_updated()
 
-                await self.client.start_notify(char, _async_callback)
+                await client.start_notify(char, _async_callback)
             except BleakError:
                 await self.async_disconnect()
 
-        return await _async_call_callback(current_value)
+        await _async_call_callback(current_value)
 
     async def _write_gatt(
         self,
@@ -506,12 +516,11 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         value: bytearray,
     ) -> bool:
         """Write to the GATT characteristic, returns whether it was written."""
-        if not await self._ensure_client_connected():
+        if not await self._ensure_client_connected() or (client := self.client) is None:
             return False
 
-        service: BleakGATTService = self.client.services.get_service(service_uuid)
-        char = service.get_characteristic(characteristic)
-        await self.client.write_gatt_char(
+        char = self._get_characteristic(client, service_uuid, characteristic)
+        await client.write_gatt_char(
             char,
             value,
         )
@@ -529,11 +538,17 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             # We don't want to turn on the device after dropping commands
             self.data.clear_open_writes()
 
-        if self.data.fan_needs_write:
-            await self.async_set_fan(self.data.fan_write)
+        if self.data.fan_needs_write and (fan_write := self.data.fan_write) is not None:
+            await self.async_set_fan(fan_write)
 
-        if self.data.heater_needs_write:
-            await self.async_set_heater(self.data.heater_write)
+        if (
+            self.data.heater_needs_write
+            and (heater_write := self.data.heater_write) is not None
+        ):
+            await self.async_set_heater(heater_write)
 
-        if self.data.set_temp_needs_write:
-            await self.async_set_target_temperature(self.data.set_temp_write)
+        if (
+            self.data.set_temp_needs_write
+            and (set_temp_write := self.data.set_temp_write) is not None
+        ):
+            await self.async_set_target_temperature(set_temp_write)
