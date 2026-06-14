@@ -79,7 +79,12 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
         """Connect as soon as possible."""
 
         def callback(_: BluetoothServiceInfoBleak, __: BluetoothChange) -> None:
-            self.hass.async_create_task(self._async_update_data())
+            # Request a debounced, serialized refresh rather than spawning a
+            # task per advertisement. A power-on advertisement burst would
+            # otherwise launch many concurrent connection attempts.
+            self.config_entry.async_create_task(
+                self.hass, self.async_request_refresh()
+            )
 
         self.config_entry.async_on_unload(
             bluetooth.async_register_callback(

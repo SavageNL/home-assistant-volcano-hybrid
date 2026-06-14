@@ -75,6 +75,11 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         super().__init__()
         self._after_data_updated = data_updated
         self._after_device_updated = device_updated
+        # Serialize connection attempts: a power-on advertisement burst can
+        # otherwise trigger several concurrent establish_connection calls,
+        # leaving every client but the last orphaned (never disconnected) and
+        # leaking connection slots until Home Assistant restarts.
+        self._connect_lock = asyncio.Lock()
         self.client: BleakClient | None = None
         self.device = device
         self.data = VolcanoHybridData(self)
@@ -137,37 +142,41 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             _LOGGER.error("No last service info available, unable to connect")
             return False
 
-        if self.is_connected:
+        async with self._connect_lock:
+            # Check connection state under the lock so a burst of concurrent
+            # attempts only establishes one connection; the others see the
+            # client another attempt just opened.
+            if self.is_connected:
+                self._determine_connected_device()
+                return True
+
+            try:
+                _LOGGER.debug("Connecting to BLE device at %s", self.device.address)
+                self.client = await establish_connection(
+                    BleakClientWithServiceCache,
+                    self.device,
+                    "Volcano Hybrid",
+                    disconnected_callback=self._disconnected,
+                )
+            except BleakNotFoundError as err:
+                _LOGGER.debug("BLE device not found while connecting: %s", err)
+                await self.async_disconnect()
+                return False
+            except BleakError as err:
+                _LOGGER.debug("Failed to connect to BLE device: %s", err)
+                await self.async_disconnect()
+                return False
+
+            self._after_data_updated()
+            try:
+                await self._async_read_and_subscribe_all()
+            except BleakError as err:
+                _LOGGER.debug("Failed to read/subscribe after connect: %s", err)
+                await self.async_disconnect()
+                return False
+
             self._determine_connected_device()
             return True
-
-        try:
-            _LOGGER.debug("Connecting to BLE device at %s", self.device.address)
-            self.client = await establish_connection(
-                BleakClientWithServiceCache,
-                self.device,
-                "Volcano Hybrid",
-                disconnected_callback=self._disconnected,
-            )
-        except BleakNotFoundError as err:
-            _LOGGER.debug("BLE device not found while connecting: %s", err)
-            await self.async_disconnect()
-            return False
-        except BleakError as err:
-            _LOGGER.debug("Failed to connect to BLE device: %s", err)
-            await self.async_disconnect()
-            return False
-
-        self._after_data_updated()
-        try:
-            await self._async_read_and_subscribe_all()
-        except BleakError as err:
-            _LOGGER.debug("Failed to read/subscribe after connect: %s", err)
-            await self.async_disconnect()
-            return False
-
-        self._determine_connected_device()
-        return True
 
     def _determine_connected_device(self) -> None:
         """

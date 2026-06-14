@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
@@ -388,6 +389,26 @@ async def test_rssi_updates_notify() -> None:
 
     volcano.rssi = -50
     assert len(data_updates) == 1
+
+
+async def test_concurrent_updates_establish_single_connection() -> None:
+    """A burst of concurrent updates only opens one client (no leaked slots)."""
+    device = make_ble_device()
+    volcano = VolcanoBLE(lambda: None, lambda: None, device=device)
+
+    async def _establish(*_args: Any, **_kwargs: Any) -> FakeBleakClient:
+        # Yield so every concurrent attempt reaches the connection lock before
+        # the first one finishes connecting.
+        await asyncio.sleep(0)
+        return FakeBleakClient(default_values())
+
+    with patch(ESTABLISH_CONNECTION, side_effect=_establish) as establish_mock:
+        await asyncio.gather(
+            *(volcano.async_manual_update(device) for _ in range(5))
+        )
+
+    assert volcano.is_connected
+    assert establish_mock.call_count == 1
 
 
 @pytest.mark.parametrize("explicit_disconnect", [True, False])
