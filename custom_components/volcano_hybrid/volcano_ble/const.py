@@ -22,6 +22,8 @@ class VolcanoSensor(StrEnum):
     PRV2_ERROR = "prv2_error"
     VIBRATION = "vibration"
     RECONNECT = "reconnect"
+    DELAYED_RECONNECT = "delayed_reconnect"
+    AUTO_CONNECT = "auto_connect"
     CONNECTED = "connected"
     RSSI = "rssi"
     CONNECTED_ADDR = "connected_addr"

@@ -9,15 +9,23 @@ from homeassistant.components.switch import (
     SwitchEntity,
     SwitchEntityDescription,
 )
-from homeassistant.const import EntityCategory
+from homeassistant.const import STATE_ON, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
 from .entity import VolcanoHybridEntity
 from .volcano_ble import VolcanoSensor
 
 PARALLEL_UPDATES = 0
+
+AUTO_CONNECT_DESCRIPTION = SwitchEntityDescription(
+    key=VolcanoSensor.AUTO_CONNECT,
+    translation_key=VolcanoSensor.AUTO_CONNECT,
+    device_class=SwitchDeviceClass.SWITCH,
+    entity_category=EntityCategory.CONFIG,
+)
 
 SENSOR_DESCRIPTIONS: dict[str, SwitchEntityDescription] = {
     VolcanoSensor.SHOWING_CELSIUS: SwitchEntityDescription(
@@ -56,6 +64,7 @@ async def async_setup_entry(
             VolcanoSwitchEntity(coordinator, VolcanoSensor.SHOWING_CELSIUS),
             VolcanoSwitchEntity(coordinator, VolcanoSensor.DISPLAY_ON_COOLING),
             VolcanoSwitchEntity(coordinator, VolcanoSensor.VIBRATION),
+            VolcanoAutoConnectSwitch(coordinator),
         ]
     )
 
@@ -81,3 +90,34 @@ class VolcanoSwitchEntity(VolcanoHybridEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the entity off."""
         await getattr(self.coordinator, "set_" + self._key)(False)
+
+
+class VolcanoAutoConnectSwitch(VolcanoHybridEntity, SwitchEntity, RestoreEntity):
+    """Switch that controls whether the integration connects on its own."""
+
+    def __init__(self, coordinator: VolcanoHybridCoordinator) -> None:
+        """Initialize the switch."""
+        super().__init__(coordinator, AUTO_CONNECT_DESCRIPTION, always_available=True)
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the last auto-connect setting and apply it."""
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        # Default to enabled (the integration's historical behavior).
+        self.coordinator.auto_connect = (
+            last_state is None or last_state.state == STATE_ON
+        )
+        self._attr_is_on = self.coordinator.auto_connect
+
+    def _handle_coordinator_update(self) -> None:
+        """Reflect the coordinator's auto-connect state."""
+        self._attr_is_on = self.coordinator.auto_connect
+        super()._handle_coordinator_update()
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable automatic connecting."""
+        await self.coordinator.async_set_auto_connect(enabled=True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable automatic connecting."""
+        await self.coordinator.async_set_auto_connect(enabled=False)

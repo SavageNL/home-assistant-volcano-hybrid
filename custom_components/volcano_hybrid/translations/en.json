@@ -48,6 +48,9 @@
             }
         },
         "button": {
+            "delayed_reconnect": {
+                "name": "(Re)connect after delay"
+            },
             "reconnect": {
                 "name": "(Re)connect"
             }
@@ -78,6 +81,9 @@
             }
         },
         "switch": {
+            "auto_connect": {
+                "name": "Auto connect"
+            },
             "display_on_cooling": {
                 "name": "Display on when cooling"
             },
@@ -95,6 +101,20 @@
         },
         "not_connected": {
             "message": "Could not send the command, the Volcano Hybrid is not connected"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "auto_connect_delay": "Auto-connect delay",
+                    "delayed_reconnect_delay": "Delayed reconnect delay"
+                },
+                "data_description": {
+                    "auto_connect_delay": "Seconds to wait after seeing the device before connecting automatically, so every Bluetooth proxy can report and the best path is chosen. Keep this low.",
+                    "delayed_reconnect_delay": "Seconds the delayed reconnect button stays disconnected before reconnecting, long enough to guarantee a fresh advertisement."
+                }
+            }
         }
     }
 }

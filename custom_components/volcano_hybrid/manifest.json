@@ -26,5 +26,5 @@
     "bleak>=2.1.1",
     "bleak-retry-connector>=4.6.0"
   ],
-  "version": "1.0.4-alpha"
+  "version": "1.0.4-alpha3"
 }

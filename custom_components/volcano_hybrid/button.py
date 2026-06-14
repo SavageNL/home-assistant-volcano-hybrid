@@ -30,6 +30,13 @@ SENSOR_DESCRIPTIONS: dict[str, ButtonEntityDescription] = {
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
+    VolcanoSensor.DELAYED_RECONNECT: ButtonEntityDescription(
+        key=VolcanoSensor.DELAYED_RECONNECT,
+        translation_key=VolcanoSensor.DELAYED_RECONNECT,
+        device_class=ButtonDeviceClass.RESTART,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
 }
 
 
@@ -45,9 +52,18 @@ async def async_setup_entry(
         """Reconnect to the Volcano Hybrid."""
         await coordinator.reconnect()
 
+    async def _async_delayed_reconnect() -> None:
+        """Reconnect to the Volcano Hybrid after the configured delay."""
+        await coordinator.delayed_reconnect()
+
     async_add_entities(
         [
             VolcanoButtonEntity(coordinator, VolcanoSensor.RECONNECT, _async_reconnect),
+            VolcanoButtonEntity(
+                coordinator,
+                VolcanoSensor.DELAYED_RECONNECT,
+                _async_delayed_reconnect,
+            ),
         ]
     )
 

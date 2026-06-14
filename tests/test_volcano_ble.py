@@ -403,9 +403,7 @@ async def test_concurrent_updates_establish_single_connection() -> None:
         return FakeBleakClient(default_values())
 
     with patch(ESTABLISH_CONNECTION, side_effect=_establish) as establish_mock:
-        await asyncio.gather(
-            *(volcano.async_manual_update(device) for _ in range(5))
-        )
+        await asyncio.gather(*(volcano.async_manual_update(device) for _ in range(5)))
 
     assert volcano.is_connected
     assert establish_mock.call_count == 1

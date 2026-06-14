@@ -64,3 +64,45 @@ async def test_switch(
         blocking=True,
     )
     assert (key, False) in mock_volcano.commands
+
+
+async def test_auto_connect_switch(
+    hass: HomeAssistant,
+    entity_registry_enabled_by_default: None,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """The auto-connect switch toggles automatic connecting."""
+    entity_id = get_entity_id(hass, "switch", "auto_connect")
+
+    # Enabled by default (the integration's historical behavior).
+    coordinator = init_integration.runtime_data
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_ON
+    assert coordinator.auto_connect is True
+
+    # Disabling releases the device so other Bluetooth clients can reach it.
+    await hass.services.async_call(
+        SWITCH_DOMAIN,
+        SERVICE_TURN_OFF,
+        {ATTR_ENTITY_ID: entity_id},
+        blocking=True,
+    )
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_OFF
+    assert coordinator.auto_connect is False
+    assert mock_volcano.disconnect_count == 1
+
+    # Re-enabling turns automatic connecting back on.
+    await hass.services.async_call(
+        SWITCH_DOMAIN,
+        SERVICE_TURN_ON,
+        {ATTR_ENTITY_ID: entity_id},
+        blocking=True,
+    )
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_ON
+    assert coordinator.auto_connect is True

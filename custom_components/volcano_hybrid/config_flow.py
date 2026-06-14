@@ -10,16 +10,31 @@ from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
     async_discovered_service_info,
 )
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import CONF_ADDRESS
+from homeassistant.core import callback
 from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
 )
 
-from .const import DOMAIN
+from .const import (
+    CONF_AUTO_CONNECT_DELAY,
+    CONF_DELAYED_RECONNECT_DELAY,
+    DEFAULT_AUTO_CONNECT_DELAY,
+    DEFAULT_DELAYED_RECONNECT_DELAY,
+    DOMAIN,
+)
 from .volcano_ble import VolcanoBLE
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,6 +49,14 @@ class VolcanoHybridConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self._discovered_device: BluetoothServiceInfoBleak | None = None
         self._discovered_devices: dict[str, str] = {}
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: ConfigEntry,
+    ) -> VolcanoHybridOptionsFlow:
+        """Return the options flow handler."""
+        return VolcanoHybridOptionsFlow()
 
     def _async_discover_devices(self, *, allowed_address: str | None = None) -> None:
         """Collect supported devices that are not configured in another entry."""
@@ -144,4 +167,48 @@ class VolcanoHybridConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="bluetooth_confirm",
             description_placeholders=placeholders,
+        )
+
+
+class VolcanoHybridOptionsFlow(OptionsFlow):
+    """Handle the options for a Volcano Hybrid entry."""
+
+    def _options_schema(self) -> vol.Schema:
+        """Build the options schema, defaulting to the current values."""
+        options = self.config_entry.options
+        delay_selector = NumberSelector(
+            NumberSelectorConfig(
+                min=0,
+                step=0.5,
+                mode=NumberSelectorMode.BOX,
+                unit_of_measurement="s",
+            )
+        )
+        return vol.Schema(
+            {
+                vol.Required(
+                    CONF_AUTO_CONNECT_DELAY,
+                    default=options.get(
+                        CONF_AUTO_CONNECT_DELAY, DEFAULT_AUTO_CONNECT_DELAY
+                    ),
+                ): delay_selector,
+                vol.Required(
+                    CONF_DELAYED_RECONNECT_DELAY,
+                    default=options.get(
+                        CONF_DELAYED_RECONNECT_DELAY, DEFAULT_DELAYED_RECONNECT_DELAY
+                    ),
+                ): delay_selector,
+            }
+        )
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self._options_schema(),
         )

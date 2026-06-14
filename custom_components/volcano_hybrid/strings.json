@@ -32,6 +32,20 @@
       "reconfigure_successful": "Re-configuration was successful"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "auto_connect_delay": "Auto-connect delay",
+          "delayed_reconnect_delay": "Delayed reconnect delay"
+        },
+        "data_description": {
+          "auto_connect_delay": "Seconds to wait after seeing the device before connecting automatically, so every Bluetooth proxy can report and the best path is chosen. Keep this low.",
+          "delayed_reconnect_delay": "Seconds the delayed reconnect button stays disconnected before reconnecting, long enough to guarantee a fresh advertisement."
+        }
+      }
+    }
+  },
   "entity": {
     "binary_sensor": {
       "auto_shutdown": {
@@ -50,6 +64,9 @@
     "button": {
       "reconnect": {
         "name": "(Re)connect"
+      },
+      "delayed_reconnect": {
+        "name": "(Re)connect after delay"
       }
     },
     "number": {
@@ -86,6 +103,9 @@
       },
       "vibration": {
         "name": "Vibration enabled"
+      },
+      "auto_connect": {
+        "name": "Auto connect"
       }
     }
   },

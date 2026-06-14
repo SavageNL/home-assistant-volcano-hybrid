@@ -43,7 +43,9 @@ Additionally, there are the following configuration/diagnostic entities:
 - The total heating time
 - Whether the auto off timer is enabled (this is essentially the same as the heating state)
 - The device connected state
-- A reconnect button
+- A reconnect button (connects immediately)
+- A delayed reconnect button (disconnects, then reconnects after a short delay so a better Bluetooth path can be chosen)
+- An auto-connect switch (enable/disable automatic connecting; see [Connecting](#connecting))
 - The rssi from the last ble message
 
 ## Warning
@@ -57,12 +59,23 @@ That being said, there are some safety measures:
 
 This will however not protect you from losing control when bluetooth fails, so _do not leave the device unattended while using the integration_.
 
-## Notice
+## Connecting
 
-This integration will connect to the Volcano as soon as it finds one (after it has been setup). 
-This means that updates from the device will trigger updates in Home Assistant instantly, but also that no other bluetooth devices will be able to control the Volcano.
+By default this integration connects to the Volcano as soon as it sees one (after it has been set up).
+This means updates from the device trigger updates in Home Assistant instantly, but it also means no other Bluetooth client can control the Volcano while Home Assistant holds the connection (the Volcano stops advertising once connected).
 
-I might make that configurable at some point (if anyone wants it and asks for it, possibly).
+You can control this behavior:
+
+- **Auto connect** switch — turn it off to release the device so the official app or another Bluetooth client can connect. Commands you send from Home Assistant (and the reconnect buttons) still connect on demand. Turn it back on to resume automatic connecting. The setting is remembered across restarts.
+- **(Re)connect** button — connects immediately.
+- **(Re)connect after delay** button — disconnects and reconnects after the configured delay, leaving time for a fresh advertisement so the strongest Bluetooth proxy can take the connection.
+
+### Configuration
+
+The connect timing is configurable via the integration's options (**Settings** → **Devices & services** → **Volcano Hybrid** → **Configure**):
+
+- **Auto-connect delay** (default `1` second) — how long to wait after seeing the device before connecting automatically. A short wait lets every Bluetooth proxy report the advertisement so the best path is chosen instead of the first one to see it. Keep this low.
+- **Delayed reconnect delay** (default `11` seconds) — how long the *(Re)connect after delay* button stays disconnected before reconnecting. The Volcano advertises roughly every 10 seconds while idle, so the default guarantees at least one fresh advertisement.
 
 ## Troubleshooting
 
@@ -74,7 +87,7 @@ I might make that configurable at some point (if anyone wants it and asks for it
 
 ### The entities show as unavailable
 
-The Bluetooth connection to the device was lost. The integration reconnects automatically as soon as the device is seen again; the diagnostic `Connected` binary sensor and `Signal strength` sensor (disabled by default) can help spot range issues. Pressing the `(Re)connect` button forces a new connection attempt.
+The Bluetooth connection to the device was lost. The integration reconnects automatically as soon as the device is seen again (unless the `Auto connect` switch is off — see [Connecting](#connecting)); the diagnostic `Connected` binary sensor and `Signal strength` sensor (disabled by default) can help spot range issues. Pressing the `(Re)connect` button forces a new connection attempt.
 
 ### Commands fail with "the Volcano Hybrid is not connected"
 

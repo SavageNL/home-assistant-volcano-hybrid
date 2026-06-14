@@ -8,6 +8,9 @@
     "button": {
       "reconnect": {
         "default": "mdi:bluetooth-connect"
+      },
+      "delayed_reconnect": {
+        "default": "mdi:bluetooth-settings"
       }
     },
     "number": {
@@ -35,6 +38,9 @@
       },
       "vibration": {
         "default": "mdi:vibrate"
+      },
+      "auto_connect": {
+        "default": "mdi:bluetooth-audio"
       }
     }
   }
