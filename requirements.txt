@@ -4,7 +4,7 @@ homeassistant==2026.6.2
 pip>=26.1.2
 ruff==0.15.17
 mypy==2.1.0
-pytest-homeassistant-custom-component==0.13.338
+pytest-homeassistant-custom-component==0.13.341
 # Pinned to the versions the homeassistant bluetooth component ships with,
 # see homeassistant/components/bluetooth/manifest.json
 # (habluetooth is one patch release ahead of the 6.8.1 HA 2026.6.2 ships)
