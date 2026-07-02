@@ -8,7 +8,7 @@ pytest-homeassistant-custom-component==0.13.338
 # Pinned to the versions the homeassistant bluetooth component ships with,
 # see homeassistant/components/bluetooth/manifest.json
 # (habluetooth is one patch release ahead of the 6.8.1 HA 2026.6.2 ships)
-habluetooth==6.8.3
+habluetooth==6.26.2
 bleak==3.0.2
 bleak-retry-connector==4.6.1
 # Requirements of the bluetooth/usb components, needed to import the
