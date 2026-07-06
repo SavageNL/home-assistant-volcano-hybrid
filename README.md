@@ -91,12 +91,181 @@ After removal the Volcano keeps working standalone; no settings on the device it
 
 # Example usage
 
+- [Complete dashboard using only stock cards](#complete-dashboard-using-only-stock-cards)
 - [Dashboard grid with shut-off timer and current states](#Dashboard-grid-with-shut-off-timer-and-current-states)
 - [Dashboard button card for pre-selected temperatures](#Button-card-for-pre-selected-temperatures)
 - [Automation to automatically progress temperature over time](#Automatically-progress-temperature-over-time)
 - [Example service calls to increase/decrease temperature by Vapesuvius temp guide steps](#increasedecrease-temperature-by-vapesuvius-temp-guide-steps)
 - [Script to fill a bag](#fill-a-bag)
 
+
+## Complete dashboard using only stock cards
+
+A single dashboard that brings together temperature control, preset temperature
+buttons, a status card, and the device settings, using only built-in Home
+Assistant cards (no `custom:button-card` or other HACS frontend cards). It is a
+[Sections](https://www.home-assistant.io/dashboards/sections/) view, so it
+reflows to one column on a phone and up to two on a wider screen.
+
+Create a new dashboard (Settings > Dashboards > Add dashboard > New dashboard
+from scratch), open its three-dot menu > Raw configuration editor, and paste the
+whole block below.
+
+The entity ids assume the default device slug `volcano_hybrid`; adjust them if
+you renamed the device. Most of the Volcano's entities are disabled by default
+(the settings, the diagnostics, and the PRV error sensors), so the Control and
+Presets sections work right away, while the Status and Settings sections show a
+reminder to enable those entities first (Settings > Devices & services > Volcano
+Hybrid > the entity > gear icon > Enabled).
+
+```yaml
+views:
+  - title: Volcano
+    icon: mdi:volcano-outline
+    type: sections
+    max_columns: 2
+    sections:
+      # ---------- Control (works out of the box) ----------
+      - type: grid
+        cards:
+          - type: heading
+            heading: Volcano Hybrid
+            heading_style: title
+            icon: mdi:volcano-outline
+            badges:
+              - type: entity
+                entity: sensor.volcano_hybrid_auto_off_time
+                show_state: true
+                show_icon: true
+              - type: entity
+                entity: binary_sensor.volcano_hybrid_connected
+                show_state: true
+                show_icon: true
+          - type: thermostat
+            entity: climate.volcano_hybrid
+            show_current_as_primary: true
+            name: " "
+            features:
+              - style: icons
+                type: climate-hvac-modes
+              - style: icons
+                type: climate-fan-modes
+
+      # ---------- Presets (works out of the box: climate.set_temperature) ----------
+      - type: grid
+        cards:
+          - type: heading
+            heading: Presets
+            heading_style: subtitle
+            icon: mdi:thermometer
+          - type: button
+            name: "179"
+            icon: mdi:thermometer-low
+            show_state: false
+            tap_action:
+              action: perform-action
+              perform_action: climate.set_temperature
+              target:
+                entity_id: climate.volcano_hybrid
+              data:
+                hvac_mode: heat
+                temperature: 179
+          - type: button
+            name: "185"
+            icon: mdi:thermometer
+            tap_action:
+              action: perform-action
+              perform_action: climate.set_temperature
+              target:
+                entity_id: climate.volcano_hybrid
+              data:
+                hvac_mode: heat
+                temperature: 185
+          - type: button
+            name: "191"
+            icon: mdi:thermometer
+            tap_action:
+              action: perform-action
+              perform_action: climate.set_temperature
+              target:
+                entity_id: climate.volcano_hybrid
+              data:
+                hvac_mode: heat
+                temperature: 191
+          - type: button
+            name: "199"
+            icon: mdi:thermometer
+            tap_action:
+              action: perform-action
+              perform_action: climate.set_temperature
+              target:
+                entity_id: climate.volcano_hybrid
+              data:
+                hvac_mode: heat
+                temperature: 199
+          - type: button
+            name: "209"
+            icon: mdi:thermometer-high
+            tap_action:
+              action: perform-action
+              perform_action: climate.set_temperature
+              target:
+                entity_id: climate.volcano_hybrid
+              data:
+                hvac_mode: heat
+                temperature: 209
+
+      # ---------- Status (Connected works OOTB; PRV/runtime need enabling) ----------
+      - type: grid
+        cards:
+          - type: heading
+            heading: Status
+            heading_style: subtitle
+            icon: mdi:heart-pulse
+          - type: markdown
+            content: |
+              {% if is_state('binary_sensor.volcano_hybrid_prv1_error','on') or is_state('binary_sensor.volcano_hybrid_prv2_error','on') %}
+              ## PRV error reported
+              Check the device.
+              {% elif not is_state('binary_sensor.volcano_hybrid_connected','on') %}
+              ## Not connected
+              The Volcano is not reachable over Bluetooth right now.
+              {% else %}
+              ## All good
+              Connected, no PRV errors reported.
+              {% endif %}
+          - type: entities
+            title: Runtime
+            show_header_toggle: false
+            entities:
+              - entity: binary_sensor.volcano_hybrid_connected
+              - entity: sensor.volcano_hybrid_current_on_time
+              - entity: sensor.volcano_hybrid_total_heat_time
+              - entity: sensor.volcano_hybrid_signal_strength
+
+      # ---------- Device settings (enable these entities first) ----------
+      - type: grid
+        cards:
+          - type: heading
+            heading: Device settings
+            heading_style: subtitle
+            icon: mdi:cog
+          - type: markdown
+            content: >
+              These entities are disabled by default. Enable each one in
+              Settings > Devices & services > Volcano Hybrid > the entity >
+              gear icon > Enabled, then reload.
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: number.volcano_hybrid_shut_off_time
+              - entity: number.volcano_hybrid_led_brightness
+              - entity: switch.volcano_hybrid_vibration_enabled
+              - entity: switch.volcano_hybrid_showing_celsius
+              - entity: switch.volcano_hybrid_display_on_when_cooling
+              - entity: binary_sensor.volcano_hybrid_auto_shutdown_enabled
+              - entity: button.volcano_hybrid_reconnect
+```
 
 ## Dashboard grid with shut-off timer and current states
 
