@@ -31,7 +31,7 @@ Ruff runs with `select = ["ALL"]` and mypy mirrors the strict settings HA core a
 - `homeassistant` is locked to whatever `pytest-homeassistant-custom-component` (latest) pins — upgrading HA past it makes pip resolution fail.
 - The bluetooth libs (`habluetooth`, `bleak`, `bleak-retry-connector`) mirror what HA's bluetooth component ships; see `homeassistant/components/bluetooth/manifest.json` for the target HA version.
 
-Releases: bump `version` in `manifest.json`; the release workflow drafts a GitHub release from it on push to main.
+Releases are tag-driven: push a git tag (e.g. `git tag 1.0.4 && git push origin 1.0.4`) and `release.yml` does the rest — it stamps the tag's version into `manifest.json` in CI (never committed), zips the integration into `volcano_hybrid.zip`, and publishes a GitHub release with that asset. HACS installs from the zip (`zip_release`/`filename` in `hacs.json`), so the committed `manifest.json` version is just a placeholder overwritten at build time. Tags containing `-alpha`/`-beta`/`-rc` are auto-marked as pre-releases. Git prevents reusing a tag, so no manual version bookkeeping is needed.
 
 ## Architecture
 

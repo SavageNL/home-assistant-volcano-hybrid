@@ -1,37 +1,56 @@
-name: Create Draft Release
+name: Publish Release
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build a release for"
+        required: true
 
 permissions:
   contents: write
 
 jobs:
-  draft:
-    name: Build draft release
+  release:
+    name: Build and publish release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.3
-      - name: get properties
-        id: manifest
-        run: |
-          echo "version=$(jq -r .version custom_components/volcano_hybrid/manifest.json)" >> "$GITHUB_OUTPUT"
+      - name: Checkout the tag
+        uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
 
-      - name: Remove Old draft
+      - name: Resolve version from tag
+        id: version
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version="${tag#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-alpha* || "$version" == *-beta* || "$version" == *-rc* ]]; then
+            echo "prerelease=--prerelease" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Stamp version into manifest and build zip
+        run: |
+          manifest="custom_components/volcano_hybrid/manifest.json"
+          tmp="$(mktemp)"
+          jq --arg v "${{ steps.version.outputs.version }}" '.version = $v' "$manifest" > "$tmp"
+          mv "$tmp" "$manifest"
+          cd custom_components/volcano_hybrid
+          zip -r "$GITHUB_WORKSPACE/volcano_hybrid.zip" . -x '*__pycache__*' '*.pyc'
+
+      - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api repos/{owner}/{repo}/releases  --jq '.[] | select(.draft == true) | .id' \
-            | xargs -I '{}' gh api -X DELETE repos/{owner}/{repo}/releases/{}
-
-      - name: Create new draft
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "${{ steps.manifest.outputs.version }}" \
-            --draft \
-            --title "v${{ steps.manifest.outputs.version }}" \
-            --generate-notes
+          gh release create "${{ steps.version.outputs.tag }}" \
+            "$GITHUB_WORKSPACE/volcano_hybrid.zip" \
+            --title "v${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            ${{ steps.version.outputs.prerelease }}

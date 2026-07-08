@@ -1,5 +1,7 @@
 {
     "name": "Volcano Hybrid",
     "homeassistant": "2026.4.0",
-    "hacs": "2.0.1"
+    "hacs": "2.0.1",
+    "zip_release": true,
+    "filename": "volcano_hybrid.zip"
 }
