@@ -131,6 +131,9 @@ Presets sections work right away, while the Status and Settings sections show a
 reminder to enable those entities first (Settings > Devices & services > Volcano
 Hybrid > the entity > gear icon > Enabled).
 
+![Dashboard](resources/dashboard.png)
+
+
 ```yaml
 views:
   - title: Volcano
