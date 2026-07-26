@@ -183,7 +183,14 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
         if last_info:
             self._device.device_rssi = last_info.rssi
 
-        if device and (connect or self._device.is_connected):
+        # An established connection is enough to refresh over. The vaporizer
+        # stops advertising once something is connected to it, so it drops out
+        # of the Bluetooth address cache and ``device`` becomes None; requiring
+        # one here silently skipped every poll for as long as the connection
+        # lasted. That left the current temperature to its notifications alone,
+        # frozen on the last one that arrived, and never replayed a pending
+        # write. Only a connect still needs a device to connect to.
+        if self._device.is_connected or (device and connect):
             await self._device.async_manual_update(device)
 
     def async_update_listeners(self) -> None:

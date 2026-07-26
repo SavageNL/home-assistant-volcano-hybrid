@@ -31,6 +31,13 @@ This file starts at 1.0.3. Earlier releases are only on the
 
 ### Fixed
 
+- The periodic update stopped running a few minutes after every connect, which
+  is why the current temperature could still freeze on a stale reading. The
+  vaporizer stops advertising once something is connected to it, so Home
+  Assistant drops it from its Bluetooth address cache, and the update skipped
+  itself whenever that lookup came up empty — silently, while the integration
+  still showed as connected. It now refreshes over the connection it already
+  has. This also restores replaying a command the vaporizer missed.
 - The current temperature could stay stuck on an old reading indefinitely. It
   was read only once when connecting and then left entirely to Bluetooth
   notifications, so a single dropped notification was never corrected. The

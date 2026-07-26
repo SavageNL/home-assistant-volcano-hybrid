@@ -45,6 +45,55 @@ async def test_enable_debounces_scheduled_connect(
         assert mock_volcano.manual_update_count >= 1
 
 
+async def test_poll_refreshes_connected_device_that_stopped_advertising(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """
+    The periodic poll refreshes a connected device that no longer advertises.
+
+    Regression test: the vaporizer stops advertising once something is
+    connected to it, so it drops out of the Bluetooth address cache and
+    ``async_ble_device_from_address`` starts returning None. Gating the refresh
+    on that silently skipped every poll for as long as the connection lasted,
+    which stopped the current temperature from ever being re-read and left it
+    frozen on the last notification that arrived.
+    """
+    coordinator = init_integration.runtime_data
+    mock_volcano.connected = True
+    mock_volcano.manual_update_count = 0
+
+    with patch(_DEVICE_PATCH, return_value=None), patch(_INFO_PATCH, return_value=None):
+        async_fire_time_changed(
+            hass,
+            dt_util.utcnow() + coordinator.update_interval + timedelta(seconds=1),
+        )
+        await hass.async_block_till_done()
+
+    assert mock_volcano.manual_update_count >= 1
+
+
+async def test_poll_does_not_connect_without_a_device(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """A disconnected device is not refreshed until it has been seen again."""
+    coordinator = init_integration.runtime_data
+    mock_volcano.connected = False
+    mock_volcano.manual_update_count = 0
+
+    with patch(_DEVICE_PATCH, return_value=None), patch(_INFO_PATCH, return_value=None):
+        async_fire_time_changed(
+            hass,
+            dt_util.utcnow() + coordinator.update_interval + timedelta(seconds=1),
+        )
+        await hass.async_block_till_done()
+
+    assert mock_volcano.manual_update_count == 0
+
+
 async def test_scheduled_connect_skipped_when_already_connected(
     hass: HomeAssistant,
     init_integration: MockConfigEntry,

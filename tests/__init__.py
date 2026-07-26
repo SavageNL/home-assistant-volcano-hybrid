@@ -116,7 +116,9 @@ class FakeVolcanoBLE(VolcanoHybridDataStatusProvider):
         """Get the connected adapter address."""
         return "hci0" if self.connected else None
 
-    async def async_manual_update(self, device: BLEDevice) -> VolcanoHybridData:
+    async def async_manual_update(
+        self, device: BLEDevice | None = None
+    ) -> VolcanoHybridData:
         """Record a manual update."""
         self.manual_update_count += 1
         return self.data

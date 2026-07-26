@@ -124,8 +124,16 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         """Return True if the device is connected."""
         return bool(self.client and self.client.is_connected)
 
-    async def async_manual_update(self, device: BLEDevice) -> VolcanoHybridData:
-        """Trigger an update of the Volcano device data."""
+    async def async_manual_update(
+        self, device: BLEDevice | None = None
+    ) -> VolcanoHybridData:
+        """
+        Trigger an update of the Volcano device data.
+
+        ``device`` is optional because a device that is already connected has
+        stopped advertising, so Home Assistant no longer has a ``BLEDevice`` for
+        it. The established connection is all this needs.
+        """
         if device and device != self.device:
             await self.async_disconnect()
             self.device = device
