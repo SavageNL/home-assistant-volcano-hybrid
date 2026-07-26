@@ -14,7 +14,7 @@ from homeassistant.components.bluetooth import BluetoothChange
 from homeassistant.components.bluetooth.match import BluetoothCallbackMatcher
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH
 from homeassistant.helpers.entity import DeviceInfo
@@ -95,19 +95,20 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
             )
         )
 
-    async def async_config_entry_first_refresh(self) -> None:
-        """Ensure that the config entry is ready."""
-        try:
-            await super().async_config_entry_first_refresh()
-        except ConfigEntryNotReady:
-            _LOGGER.debug(
-                "Config entry is determined not to be ready, but "
-                "that's because we can't connect. We will connect "
-                "later and are ready now."
-            )
+    async def async_register_callbacks(self) -> None:
+        """
+        Install the advertisement callback without connecting.
+
+        Called from setup instead of ``async_config_entry_first_refresh`` so a
+        slow cold-boot connect never blocks Home Assistant startup; the first
+        connect runs in a background task. (Newer HA exposes a public
+        ``async_setup`` wrapper for the ``_async_setup`` hook, but the pinned
+        version does not, so the hook is invoked directly here.)
+        """
+        await self._async_setup()
 
     async def _async_setup(self) -> None:
-        """Connect as soon as possible."""
+        """Register the advertisement callback that drives auto-connect."""
 
         @callback
         def _on_advertisement(

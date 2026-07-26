@@ -2,21 +2,81 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_ADDRESS
 from homeassistant.helpers import device_registry as dr
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.volcano_hybrid import async_remove_config_entry_device
 from custom_components.volcano_hybrid.const import DOMAIN
 
-from . import VOLCANO_ADDRESS, FakeVolcanoBLE, get_entity_id
+from . import (
+    VOLCANO_ADDRESS,
+    VOLCANO_NAME,
+    FakeVolcanoBLE,
+    get_entity_id,
+    make_ble_device,
+    make_service_info,
+)
 
 if TYPE_CHECKING:
+    from bleak.backends.device import BLEDevice
     from homeassistant.core import HomeAssistant
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.volcano_hybrid.volcano_ble import VolcanoHybridData
 
 OTHER_ADDRESS = "11:22:33:44:55:66"
+
+_DEVICE_PATCH = "homeassistant.components.bluetooth.async_ble_device_from_address"
+_INFO_PATCH = "homeassistant.components.bluetooth.async_last_service_info"
+
+
+async def test_setup_does_not_block_on_initial_connect(
+    hass: HomeAssistant,
+    mock_volcano: FakeVolcanoBLE,
+    enable_bluetooth: None,
+) -> None:
+    """Setup returns immediately instead of awaiting the initial BLE connect."""
+    release = asyncio.Event()
+
+    async def blocking_update(device: BLEDevice) -> VolcanoHybridData:
+        # Stand in for a cold-boot connect that has not resolved yet.
+        await release.wait()
+        mock_volcano.connected = True
+        return mock_volcano.data
+
+    mock_volcano.async_manual_update = blocking_update  # type: ignore[method-assign]
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=VOLCANO_ADDRESS,
+        data={CONF_ADDRESS: VOLCANO_ADDRESS},
+        title=VOLCANO_NAME,
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch(_DEVICE_PATCH, return_value=make_ble_device()),
+        patch(_INFO_PATCH, return_value=make_service_info()),
+    ):
+        # Would deadlock if setup awaited the connect; the timeout makes that a
+        # clean failure instead of a hang.
+        async with asyncio.timeout(5):
+            assert await hass.config_entries.async_setup(entry.entry_id)
+
+        # The entry is up with entities present while the connect is still blocked.
+        assert entry.state is ConfigEntryState.LOADED
+        assert not mock_volcano.connected
+        assert hass.states.get(get_entity_id(hass, "climate", "volcano")) is not None
+
+        # Releasing the background connect lets it complete.
+        release.set()
+        await hass.async_block_till_done()
+        assert mock_volcano.connected
 
 
 async def test_setup_and_unload_entry(

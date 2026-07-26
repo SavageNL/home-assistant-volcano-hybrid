@@ -29,9 +29,22 @@ async def async_setup_entry(
         address=entry.data[CONF_ADDRESS],
     )
     entry.runtime_data = coordinator
-    await coordinator.async_config_entry_first_refresh()
 
+    # Register the advertisement callback without blocking on a connect. The
+    # connect below can stall at cold boot until the Bluetooth transport is
+    # ready; awaiting it here would gate the whole HA startup on this entry.
+    await coordinator.async_register_callbacks()
+
+    # Entities read coordinator.data, which is already initialised in the
+    # coordinator's __init__, so bring them up immediately.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Do the first connect in the background so startup is never gated on BLE.
+    # The advertisement callback registered above reconnects on its own if the
+    # device is out of range now.
+    entry.async_create_background_task(
+        hass, coordinator.async_refresh(), f"{DOMAIN}_first_refresh"
+    )
     return True
 
 

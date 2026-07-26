@@ -42,7 +42,7 @@ Two layers, deliberately separated:
 
 ### Update flow (push, not poll)
 
-The integration is `local_push`: BLE notifications call back into `VolcanoBLE`, which calls `coordinator.async_update_listeners()`. The coordinator's 10s `update_interval` is only a reconnect/fallback poll, and a bluetooth-discovery callback triggers immediate connect attempts when the device is seen. Availability is connection state: `async_update_listeners` overrides `last_update_success` with `is_connected`. Setup never fails on an unreachable device — `async_config_entry_first_refresh` swallows `ConfigEntryNotReady` and connects later.
+The integration is `local_push`: BLE notifications call back into `VolcanoBLE`, which calls `coordinator.async_update_listeners()`. The coordinator's 10s `update_interval` is only a reconnect/fallback poll, and a bluetooth-discovery callback triggers immediate connect attempts when the device is seen. Availability is connection state: `async_update_listeners` overrides `last_update_success` with `is_connected`. Setup never blocks on the device: `async_setup_entry` calls `coordinator.async_register_callbacks()` (installs the advertisement callback), forwards the platforms, then runs the first connect in a background task — so a slow cold-boot connect never gates Home Assistant startup, and an unreachable device just connects later when its advertisement arrives.
 
 ### Pending-write tracking (the subtle part)
 
