@@ -36,6 +36,9 @@
       "showing_celsius": {
         "default": "mdi:temperature-celsius"
       },
+      "display_on_cooling": {
+        "default": "mdi:monitor"
+      },
       "vibration": {
         "default": "mdi:vibrate"
       },

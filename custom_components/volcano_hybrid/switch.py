@@ -11,7 +11,7 @@ from homeassistant.components.switch import (
 )
 from homeassistant.const import STATE_ON, EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
@@ -55,7 +55,7 @@ SENSOR_DESCRIPTIONS: dict[str, SwitchEntityDescription] = {
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: VolcanoHybridConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the Volcano BLE switches."""
     coordinator = entry.runtime_data

@@ -288,6 +288,29 @@ async def test_pending_writes_replayed_when_device_on() -> None:
     assert (CHARACTERISTIC_HEATER_ON, b"\x01") in client.written
 
 
+async def test_pending_write_during_connect_does_not_deadlock() -> None:
+    """
+    A pending write is replayed during the initial connect without hanging.
+
+    Regression test: the auto-off-time characteristic replays pending writes
+    from its callback, which the initial read invokes while the connect still
+    holds the connection lock. Re-acquiring that lock for the write deadlocked
+    the connect, wedging the coordinator until Home Assistant restarted.
+    """
+    client = FakeBleakClient(default_values())  # device on, set_temp 190
+    volcano = VolcanoBLE(lambda: None, lambda: None)
+
+    # A command issued while disconnected leaves a write pending.
+    volcano.data.set_temp_write = 200
+
+    with patch(ESTABLISH_CONNECTION, AsyncMock(return_value=client)):
+        async with asyncio.timeout(5):
+            await volcano.async_manual_update(make_ble_device())
+
+    assert volcano.is_connected
+    assert (CHARACTERISTIC_SET_TEMP, (2000).to_bytes(2, "little")) in client.written
+
+
 class ConfirmingClient(FakeBleakClient):
     """
     A client that confirms heater writes before the write call returns.

@@ -16,8 +16,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -118,7 +117,10 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
             # (rather than connecting on this advertisement) collapses a
             # power-on burst into one attempt and gives every Bluetooth proxy
             # a moment to report so the best path is chosen.
-            self._device.device_rssi = service_info.rssi
+            # Assigning the property (not the backing field) pushes the new
+            # signal strength to the entities right away, so the RSSI sensor
+            # tracks advertisements instead of only the 10s fallback poll.
+            self._device.rssi = service_info.rssi
             if self.auto_connect and not self._device.is_connected:
                 self._schedule_connect(self.auto_connect_delay)
 

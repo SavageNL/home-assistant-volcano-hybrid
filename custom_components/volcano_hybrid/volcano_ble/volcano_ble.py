@@ -142,41 +142,56 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             _LOGGER.error("No last service info available, unable to connect")
             return False
 
-        async with self._connect_lock:
-            # Check connection state under the lock so a burst of concurrent
-            # attempts only establishes one connection; the others see the
-            # client another attempt just opened.
-            if self.is_connected:
-                self._determine_connected_device()
-                return True
-
-            try:
-                _LOGGER.debug("Connecting to BLE device at %s", self.device.address)
-                self.client = await establish_connection(
-                    BleakClientWithServiceCache,
-                    self.device,
-                    "Volcano Hybrid",
-                    disconnected_callback=self._disconnected,
-                )
-            except BleakNotFoundError as err:
-                _LOGGER.debug("BLE device not found while connecting: %s", err)
-                await self.async_disconnect()
-                return False
-            except BleakError as err:
-                _LOGGER.debug("Failed to connect to BLE device: %s", err)
-                await self.async_disconnect()
-                return False
-
-            self._after_data_updated()
-            try:
-                await self._async_read_and_subscribe_all()
-            except BleakError as err:
-                _LOGGER.debug("Failed to read/subscribe after connect: %s", err)
-                await self.async_disconnect()
-                return False
-
+        # Fast path, deliberately outside the lock: an established connection
+        # needs no connect attempt. Waiting for the lock here would deadlock a
+        # write that is issued while the connect is still running, because the
+        # initial read subscribes and immediately invokes its callbacks, and
+        # the auto-off-time callback replays pending writes. That write would
+        # wait for the lock held by the connect, which in turn waits for the
+        # read that triggered the write.
+        if self.is_connected:
             self._determine_connected_device()
             return True
+
+        async with self._connect_lock:
+            return await self._async_connect(self.device)
+
+    async def _async_connect(self, device: BLEDevice) -> bool:
+        """Connect and read the initial state, with the connect lock held."""
+        # Check connection state under the lock so a burst of concurrent
+        # attempts only establishes one connection; the others see the
+        # client another attempt just opened.
+        if self.is_connected:
+            self._determine_connected_device()
+            return True
+
+        try:
+            _LOGGER.debug("Connecting to BLE device at %s", device.address)
+            self.client = await establish_connection(
+                BleakClientWithServiceCache,
+                device,
+                "Volcano Hybrid",
+                disconnected_callback=self._disconnected,
+            )
+        except BleakNotFoundError as err:
+            _LOGGER.debug("BLE device not found while connecting: %s", err)
+            await self.async_disconnect()
+            return False
+        except BleakError as err:
+            _LOGGER.debug("Failed to connect to BLE device: %s", err)
+            await self.async_disconnect()
+            return False
+
+        self._after_data_updated()
+        try:
+            await self._async_read_and_subscribe_all()
+        except BleakError as err:
+            _LOGGER.debug("Failed to read/subscribe after connect: %s", err)
+            await self.async_disconnect()
+            return False
+
+        self._determine_connected_device()
+        return True
 
     def _determine_connected_device(self) -> None:
         """

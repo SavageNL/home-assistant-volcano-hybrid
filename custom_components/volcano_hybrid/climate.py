@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.climate import (
+    FAN_OFF,
+    FAN_ON,
     ClimateEntity,
     ClimateEntityDescription,
     ClimateEntityFeature,
@@ -12,7 +14,7 @@ from homeassistant.components.climate import (
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import VOLCANO_HYBRID_MAX_TEMP, VOLCANO_HYBRID_MIN_DISPLAY_TEMP
 from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
@@ -32,7 +34,7 @@ SENSOR_DESCRIPTIONS: dict[str, ClimateEntityDescription] = {
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: VolcanoHybridConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the climate entity for Volcano Hybrid."""
     coordinator = config_entry.runtime_data
@@ -48,7 +50,7 @@ class VolcanoHybridClimate(VolcanoHybridEntity, ClimateEntity):
 
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
-    _attr_fan_modes = ["off", "on"]
+    _attr_fan_modes = [FAN_OFF, FAN_ON]
     _attr_min_temp = VOLCANO_HYBRID_MIN_DISPLAY_TEMP
     _attr_max_temp = VOLCANO_HYBRID_MAX_TEMP
     _attr_target_temperature_step = 1
@@ -65,7 +67,7 @@ class VolcanoHybridClimate(VolcanoHybridEntity, ClimateEntity):
         self._attr_current_temperature = 0
         self._attr_target_temperature = 40
         self._attr_hvac_mode = HVACMode.OFF
-        self._attr_fan_mode = "off"
+        self._attr_fan_mode = FAN_OFF
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -74,7 +76,7 @@ class VolcanoHybridClimate(VolcanoHybridEntity, ClimateEntity):
         self._attr_hvac_mode = (
             HVACMode.HEAT if self.coordinator.data.heater_state else HVACMode.OFF
         )
-        self._attr_fan_mode = "on" if self.coordinator.data.fan_state else "off"
+        self._attr_fan_mode = FAN_ON if self.coordinator.data.fan_state else FAN_OFF
         self._attr_assumed_state = self.coordinator.data.is_assumed
         super()._handle_coordinator_update()
 
@@ -88,4 +90,4 @@ class VolcanoHybridClimate(VolcanoHybridEntity, ClimateEntity):
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set the fan mode."""
-        await self.coordinator.set_fan(fan_mode == "on")
+        await self.coordinator.set_fan(fan_mode == FAN_ON)
