@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A HACS custom integration for Home Assistant that controls a Storz & Bickel Volcano Hybrid vaporizer over Bluetooth LE. It declares `quality_scale: platinum` in the manifest; `custom_components/volcano_hybrid/quality_scale.yaml` documents the status of every quality-scale rule. Changes should not regress any rule (strict typing, full config-flow test coverage, `PARALLEL_UPDATES` in every platform, translated exceptions, etc.).
+A HACS custom integration for Home Assistant that controls a Storz & Bickel Volcano Hybrid vaporizer over Bluetooth LE. It targets the platinum tier of Home Assistant's integration quality scale and `custom_components/volcano_hybrid/quality_scale.yaml` tracks the status of every rule, but it deliberately does not declare `quality_scale` in the manifest: the tier is awarded by the HA core team to core integrations, so a custom integration stating one would be claiming a rating nobody granted. Treat the scale as the standard to hold the code to — changes should not regress any rule (strict typing, full config-flow test coverage, `PARALLEL_UPDATES` in every platform, translated exceptions, etc.).
 
 ## Commands
 

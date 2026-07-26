@@ -1,3 +1,8 @@
+# Self-assessment against Home Assistant's integration quality scale, kept as
+# the standard this integration holds itself to. The tier itself is awarded by
+# the HA core team to core integrations, so the manifest deliberately does not
+# declare a quality_scale: meeting every rule here is not the same as having
+# been granted the rating.
 rules:
   # Bronze
   action-setup:
