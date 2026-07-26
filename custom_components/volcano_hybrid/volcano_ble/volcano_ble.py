@@ -133,6 +133,12 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
 
         # This will update when not connected yet
         await self._ensure_client_connected()
+        # Re-read the current temperature rather than trusting the
+        # subscription. Notifications are unacknowledged, so a dropped one
+        # leaves a stale reading that nothing else corrects: the device only
+        # notifies when the value changes, and while it holds a temperature it
+        # barely changes. This poll is the fallback that repairs that.
+        await self._async_read_current_temp()
         await self._async_try_ensure_written_values()
         return self.data
 
@@ -246,10 +252,18 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             subscribe=subscribe,
         )
 
-    async def _async_read_initial_characteristics(self) -> None:
-        def _read_current_temp(data: bytearray) -> None:
+    async def _async_read_current_temp(self, *, subscribe: bool = False) -> None:
+        def _read_current_temp_inner(data: bytearray) -> None:
             self.data.current_temp = int(int.from_bytes(data, "little") / 10)
 
+        await self._async_read_and_subscribe(
+            SERVICE_UUID,
+            CHARACTERISTIC_CURRENT_TEMP,
+            _read_current_temp_inner,
+            subscribe=subscribe,
+        )
+
+    async def _async_read_initial_characteristics(self) -> None:
         def _parse_prj2v(data: bytearray) -> None:
             prj2v = int.from_bytes(data, "little")
             self.data.showing_celsius = bool(
@@ -298,14 +312,12 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         async def _async_read_set_temp_and_subscribe() -> None:
             await self._async_read_set_temp(subscribe=True)
 
+        async def _async_read_current_temp_and_subscribe() -> None:
+            await self._async_read_current_temp(subscribe=True)
+
         await self._async_read_prj1v(subscribe=True)  # Ensure on-state is correct
         await asyncio.gather(
-            self._async_read_and_subscribe(
-                SERVICE_UUID,
-                CHARACTERISTIC_CURRENT_TEMP,
-                _read_current_temp,
-                subscribe=True,
-            ),
+            _async_read_current_temp_and_subscribe(),
             _async_read_set_temp_and_subscribe(),
             self._async_read_and_subscribe(
                 SERVICE3_UUID,

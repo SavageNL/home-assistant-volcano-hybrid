@@ -288,6 +288,28 @@ async def test_pending_writes_replayed_when_device_on() -> None:
     assert (CHARACTERISTIC_HEATER_ON, b"\x01") in client.written
 
 
+async def test_update_rereads_current_temperature() -> None:
+    """
+    The periodic update re-reads the current temperature.
+
+    Regression test: the current temperature was only read once, at connect,
+    and then left to the notification subscription. Notifications are
+    unacknowledged, and the device only notifies on change, so a single
+    dropped packet froze the reading in Home Assistant indefinitely.
+    """
+    client = FakeBleakClient(default_values())
+    volcano, _, _ = await connect(client)
+    assert volcano.data.current_temp == 185
+
+    # The device heats up but the notification never arrives.
+    client.values[CHARACTERISTIC_CURRENT_TEMP] = (1900).to_bytes(2, "little")
+
+    assert volcano.device is not None
+    await volcano.async_manual_update(volcano.device)
+
+    assert volcano.data.current_temp == 190
+
+
 async def test_pending_write_during_connect_does_not_deadlock() -> None:
     """
     A pending write is replayed during the initial connect without hanging.
