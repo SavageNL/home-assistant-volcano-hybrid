@@ -22,6 +22,7 @@ ignore = [
     "ARG002", # Same for kwargs
     "ARG004", # Same for framework-required static method arguments
     "RUF012", # Entity _attr class attributes override instance variables, like HA core
+    "CPY001", # Source files carry no copyright header, like HA core; see LICENSE
 ]
 
 [lint.per-file-ignores]
@@ -29,6 +30,7 @@ ignore = [
     "S101", # Tests assert via assert statements
     "PLR2004", # Tests compare against literal expected values
     "PLR0913", # Parametrized tests take many fixtures and parameters
+    "PLR0917", # Same, counted as positional arguments
 ]
 
 [lint.flake8-pytest-style]
