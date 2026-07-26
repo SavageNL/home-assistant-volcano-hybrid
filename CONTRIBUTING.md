@@ -78,7 +78,26 @@ manual version bump to commit; the version lives in the tag.
      `1.0.4` and `v1.0.4` work),
    - stamps that version into `manifest.json` **in CI only** (never committed),
    - zips `custom_components/volcano_hybrid/` into `volcano_hybrid.zip`, and
-   - publishes a GitHub release with that zip attached and auto-generated notes.
+   - publishes a GitHub release with that zip attached, using whatever has
+     accumulated under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) as
+     the release notes, followed by GitHub's auto-generated commit list.
+
+### The changelog
+
+Add an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) in the
+same pull request as any user-facing change. There is no version to set: that
+block *is* the release notes for whatever gets tagged next, so releasing stays
+a single tag push.
+
+After a release you can rename the block to the version you just shipped and
+open an empty `## [Unreleased]` above it, to keep a per-version history in the
+file. That is bookkeeping for readers of the changelog only — nothing in the
+release process depends on it.
+
+If `## [Unreleased]` is empty the release still publishes, with auto-generated
+notes only, and logs a warning in the workflow run. It warns rather than fails
+because the tag already points at that commit, so a missing entry cannot be
+fixed by editing the changelog afterwards.
 
 HACS installs from the zip asset (`zip_release`/`filename` in
 [`hacs.json`](hacs.json)), so the `version` committed in `manifest.json` is only

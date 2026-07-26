@@ -33,6 +33,8 @@ Ruff runs with `select = ["ALL"]` and mypy mirrors the strict settings HA core a
 
 Releases are tag-driven: push a git tag (e.g. `git tag 1.0.4 && git push origin 1.0.4`) and `release.yml` does the rest — it stamps the tag's version into `manifest.json` in CI (never committed), zips the integration into `volcano_hybrid.zip`, and publishes a GitHub release with that asset. HACS installs from the zip (`zip_release`/`filename` in `hacs.json`), so the committed `manifest.json` version is just a placeholder overwritten at build time. Tags containing `-alpha`/`-beta`/`-rc` are auto-marked as pre-releases. Git prevents reusing a tag, so no manual version bookkeeping is needed.
 
+The release notes come from `CHANGELOG.md`: the workflow copies the `## [Unreleased]` section of the tagged commit into the release body, with GitHub's generated commit list appended. There is no version heading to pre-set — user-facing changes just need an `## [Unreleased]` entry as they land, and tagging remains the only release step. An empty section only warns (the tag already points at the commit, so it cannot be repaired after the fact). Renaming the block to the shipped version afterwards is optional bookkeeping that nothing depends on.
+
 ## Architecture
 
 Two layers, deliberately separated:

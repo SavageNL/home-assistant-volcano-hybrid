@@ -45,12 +45,39 @@ jobs:
           cd custom_components/volcano_hybrid
           zip -r "$GITHUB_WORKSPACE/volcano_hybrid.zip" . -x '*__pycache__*' '*.pyc'
 
+      - name: Extract release notes from the changelog
+        id: notes
+        run: |
+          notes="$RUNNER_TEMP/release-notes.md"
+          # The notes are whatever has accumulated under "## [Unreleased]",
+          # so releasing stays a single tag push with no version to pre-set.
+          awk '
+            index($0, "## [Unreleased]") == 1 { found = 1; next }
+            found && index($0, "## [") == 1 { exit }
+            found { print }
+          ' CHANGELOG.md > "$notes"
+          if grep -q '[^[:space:]]' "$notes"; then
+            echo "file=$notes" >> "$GITHUB_OUTPUT"
+          else
+            # Warn rather than fail: the tag already points at this commit, so
+            # failing here could not be fixed by editing the changelog later.
+            echo "::warning::No entries under '## [Unreleased]' in" \
+              "CHANGELOG.md; publishing with auto-generated notes only."
+          fi
+
       - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # A --notes-file body is pre-pended to the generated notes, so the
+          # curated entries lead and the commit list follows.
+          notes_args=()
+          if [ -n "${{ steps.notes.outputs.file }}" ]; then
+            notes_args+=(--notes-file "${{ steps.notes.outputs.file }}")
+          fi
           gh release create "${{ steps.version.outputs.tag }}" \
             "$GITHUB_WORKSPACE/volcano_hybrid.zip" \
             --title "v${{ steps.version.outputs.version }}" \
             --generate-notes \
+            "${notes_args[@]}" \
             ${{ steps.version.outputs.prerelease }}
