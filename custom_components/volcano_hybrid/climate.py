@@ -64,20 +64,35 @@ class VolcanoHybridClimate(VolcanoHybridEntity, ClimateEntity):
     def __init__(self, coordinator: VolcanoHybridCoordinator, key: str) -> None:
         """Initialize the climate."""
         super().__init__(coordinator, SENSOR_DESCRIPTIONS[key])
-        self._attr_current_temperature = 0
-        self._attr_target_temperature = 40
-        self._attr_hvac_mode = HVACMode.OFF
-        self._attr_fan_mode = FAN_OFF
+        # Seed from the coordinator instead of inventing values: the entity
+        # writes its first state before the first coordinator update, so made
+        # up defaults end up in the recorder as if they were readings.
+        self._update_attrs()
+
+    def _update_attrs(self) -> None:
+        """Reflect the coordinator data on the entity attributes."""
+        data = self.coordinator.data
+        self._attr_current_temperature = data.current_temp
+        self._attr_target_temperature = data.set_temp_state
+        self._attr_assumed_state = data.is_assumed
+
+        # None means "not read from the device yet", which is reported as
+        # unknown rather than claiming the device is off.
+        heater_state = data.heater_state
+        if heater_state is None:
+            self._attr_hvac_mode = None
+        else:
+            self._attr_hvac_mode = HVACMode.HEAT if heater_state else HVACMode.OFF
+
+        fan_state = data.fan_state
+        if fan_state is None:
+            self._attr_fan_mode = None
+        else:
+            self._attr_fan_mode = FAN_ON if fan_state else FAN_OFF
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._attr_current_temperature = self.coordinator.data.current_temp
-        self._attr_target_temperature = self.coordinator.data.set_temp_state
-        self._attr_hvac_mode = (
-            HVACMode.HEAT if self.coordinator.data.heater_state else HVACMode.OFF
-        )
-        self._attr_fan_mode = FAN_ON if self.coordinator.data.fan_state else FAN_OFF
-        self._attr_assumed_state = self.coordinator.data.is_assumed
+        self._update_attrs()
         super()._handle_coordinator_update()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:

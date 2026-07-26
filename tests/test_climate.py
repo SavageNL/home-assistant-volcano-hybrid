@@ -23,6 +23,7 @@ from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_TEMPERATURE,
     STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
 )
 from homeassistant.exceptions import HomeAssistantError
 
@@ -70,6 +71,33 @@ async def test_climate_state(
     assert state is not None
     assert state.state == HVACMode.OFF
     assert state.attributes[ATTR_FAN_MODE] == "on"
+
+
+async def test_climate_unknown_before_device_data(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """
+    Nothing is claimed about the device before its state has been read.
+
+    Regression test: the entity started out reporting 0 degrees current,
+    40 degrees target and "off", which the recorder stored as if they were
+    readings every time the entry was reloaded.
+    """
+    entity_id = get_entity_id(hass, "climate", "volcano")
+
+    # Connected, but no characteristic has been read yet.
+    mock_volcano.connected = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_UNKNOWN
+    assert state.attributes[ATTR_CURRENT_TEMPERATURE] is None
+    assert state.attributes[ATTR_TEMPERATURE] is None
+    assert state.attributes[ATTR_FAN_MODE] is None
 
 
 async def test_climate_assumed_state(
