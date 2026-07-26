@@ -27,6 +27,8 @@ This file starts at 1.0.3. Earlier releases are only on the
   without deleting and re-adding it.
 - Downloadable diagnostics for bug reports, with the Bluetooth address and
   serial number redacted.
+- A complete example dashboard in the README, with a screenshot.
+- Icons for the entities that do not get one from their device class.
 
 ### Fixed
 
@@ -47,6 +49,8 @@ This file starts at 1.0.3. Earlier releases are only on the
   state is known.
 - The signal strength sensor now follows advertisements instead of only
   updating on the periodic poll.
+- Bluetooth discovery no longer errors on an advertisement that carries no
+  name, which it could hit while checking any nearby device.
 
 ### Changed
 
