@@ -48,3 +48,42 @@ async def test_diagnostics(
     assert diagnostics["state"]["fan"] is False
     assert diagnostics["state"]["shut_off"] == 30
     assert diagnostics["state"]["is_assumed"] is False
+
+
+async def test_diagnostics_include_raw_registers_and_history(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """The raw status registers and error history are reported for support."""
+    data = mock_volcano.data
+    data.prj1 = 0x2020
+    data.prj2 = 0x0000
+    data.prj3 = 0x0400
+    data.hist1 = "0011223344556677"
+    data.hist2 = "8899aabbccddeeff"
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, init_integration)
+
+    registers = diagnostics["registers"]
+    assert registers["prj1"] == "0x2020"
+    assert registers["prj2"] == "0x0000"
+    assert registers["prj3"] == "0x0400"
+    assert registers["hist1"] == "0011223344556677"
+    assert registers["hist2"] == "8899aabbccddeeff"
+
+
+async def test_diagnostics_registers_before_connect(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Registers that were never read are reported as null, not formatted."""
+    diagnostics = await async_get_config_entry_diagnostics(hass, init_integration)
+
+    assert diagnostics["registers"] == {
+        "prj1": None,
+        "prj2": None,
+        "prj3": None,
+        "hist1": None,
+        "hist2": None,
+    }

@@ -21,6 +21,8 @@ from custom_components.volcano_hybrid.volcano_ble.volcano_ble import (
     CHARACTERISTIC_HEAT_MINUTES_CHANGED,
     CHARACTERISTIC_HEATER_OFF,
     CHARACTERISTIC_HEATER_ON,
+    CHARACTERISTIC_HIST1,
+    CHARACTERISTIC_HIST2,
     CHARACTERISTIC_LED_BRIGHTNESS,
     CHARACTERISTIC_PRJ1V,
     CHARACTERISTIC_PRJ2V,
@@ -120,6 +122,8 @@ def default_values() -> dict[str, bytes]:
         CHARACTERISTIC_HEAT_MINUTES_CHANGED: (30).to_bytes(2, "little"),
         CHARACTERISTIC_SHUT_OFF: (1800).to_bytes(2, "little"),
         CHARACTERISTIC_LED_BRIGHTNESS: (70).to_bytes(2, "little"),
+        CHARACTERISTIC_HIST1: bytes.fromhex("0011223344556677"),
+        CHARACTERISTIC_HIST2: bytes.fromhex("8899aabbccddeeff"),
     }
 
 
@@ -174,6 +178,40 @@ async def test_connect_reads_state() -> None:
     # State characteristics are subscribed to for push updates
     assert CHARACTERISTIC_CURRENT_TEMP in client.notify_callbacks
     assert CHARACTERISTIC_PRJ1V in client.notify_callbacks
+
+
+async def test_connect_reads_raw_registers_and_history() -> None:
+    """Connecting keeps the undecoded registers and history for diagnostics."""
+    client = FakeBleakClient(default_values())
+    volcano, _, _ = await connect(client)
+
+    data = volcano.data
+    assert data.prj1 == (
+        MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA | MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE
+    )
+    assert data.prj2 == 0
+    assert data.prj3 == 0
+    assert data.hist1 == "0011223344556677"
+    assert data.hist2 == "8899aabbccddeeff"
+
+    # History is read once; it is not a push characteristic
+    assert CHARACTERISTIC_HIST1 not in client.notify_callbacks
+    assert CHARACTERISTIC_HIST2 not in client.notify_callbacks
+
+
+async def test_prj1_notification_updates_raw_register() -> None:
+    """A status notification refreshes the raw register, not just the flags."""
+    client = FakeBleakClient(default_values())
+    volcano, _, _ = await connect(client)
+
+    callback = client.notify_callbacks[CHARACTERISTIC_PRJ1V]
+    await callback(
+        FakeCharacteristic(CHARACTERISTIC_PRJ1V),
+        bytearray((MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA).to_bytes(2, "little")),
+    )
+
+    assert volcano.data.prj1 == MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA
+    assert volcano.data.fan is False
 
 
 async def test_notifications_update_data() -> None:

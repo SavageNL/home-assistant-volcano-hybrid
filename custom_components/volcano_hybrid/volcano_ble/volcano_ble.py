@@ -246,6 +246,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     async def _async_read_prj1v(self, *, subscribe: bool = False) -> None:
         def _read_prj1v_inner(data: bytearray) -> None:
             prj1v = int.from_bytes(data, "little")
+            self.data.prj1 = prj1v
             self.data.heater = bool(prj1v & MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA)
             self.data.fan = bool(prj1v & MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE)
             self.data.auto_shutdown = bool(
@@ -274,6 +275,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
     async def _async_read_initial_characteristics(self) -> None:
         def _parse_prj2v(data: bytearray) -> None:
             prj2v = int.from_bytes(data, "little")
+            self.data.prj2 = prj2v
             self.data.showing_celsius = bool(
                 prj2v & MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA == 0
             )
@@ -284,7 +286,14 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
 
         def _parse_prj3v(data: bytearray) -> None:
             prj3v = int.from_bytes(data, "little")
+            self.data.prj3 = prj3v
             self.data.vibration = bool(prj3v & MASK_PRJSTAT3_VOLCANO_VIBRATION == 0)
+
+        def _parse_hist1(data: bytearray) -> None:
+            self.data.hist1 = data.hex()
+
+        def _parse_hist2(data: bytearray) -> None:
+            self.data.hist2 = data.hex()
 
         def _parse_serial_number(data: bytearray) -> None:
             self.data.serial_number = data.decode("utf-8").strip()
@@ -389,6 +398,12 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
                 CHARACTERISTIC_LED_BRIGHTNESS,
                 _parse_led_brightness,
                 subscribe=False,
+            ),
+            self._async_read_and_subscribe(
+                SERVICE3_UUID, CHARACTERISTIC_HIST1, _parse_hist1, subscribe=False
+            ),
+            self._async_read_and_subscribe(
+                SERVICE3_UUID, CHARACTERISTIC_HIST2, _parse_hist2, subscribe=False
             ),
         )
         _LOGGER.debug("Initial characteristics read complete")

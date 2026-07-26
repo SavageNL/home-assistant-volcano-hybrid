@@ -13,6 +13,13 @@ from .coordinator import VolcanoHybridConfigEntry
 TO_REDACT = {CONF_ADDRESS, "connected_addr", "serial_number"}
 
 
+def _as_hex(value: int | None) -> str | None:
+    """Format a status register the way the vendor app's report does."""
+    if value is None:
+        return None
+    return f"0x{value:04x}"
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: VolcanoHybridConfigEntry
 ) -> dict[str, Any]:
@@ -54,6 +61,17 @@ async def async_get_config_entry_diagnostics(
                 "current_auto_off_time": data.current_auto_off_time,
                 "current_on_time": data.current_on_time,
                 "heat_time": data.heat_time,
+            },
+            # The raw status registers and error history, as read by the vendor
+            # app's "Analysis" report. Undecoded on purpose: these carry the
+            # bits the integration does not interpret, which is exactly what
+            # makes them worth attaching to a bug report.
+            "registers": {
+                "prj1": _as_hex(data.prj1),
+                "prj2": _as_hex(data.prj2),
+                "prj3": _as_hex(data.prj3),
+                "hist1": data.hist1,
+                "hist2": data.hist2,
             },
         },
         TO_REDACT,

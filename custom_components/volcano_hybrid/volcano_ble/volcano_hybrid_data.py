@@ -46,6 +46,15 @@ class VolcanoHybridData:
         self.shut_off: int | None = None
         self.led_brightness: int | None = None
 
+        # Raw status registers and error history, kept purely for diagnostics.
+        # The vendor app reads exactly these five when building the report it
+        # asks users to send to support.
+        self.prj1: int | None = None
+        self.prj2: int | None = None
+        self.prj3: int | None = None
+        self.hist1: str | None = None
+        self.hist2: str | None = None
+
         # Prv1 attributes
         self._heater: bool | None = None
         self._fan: bool | None = None
