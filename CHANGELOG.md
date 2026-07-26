@@ -26,7 +26,9 @@ This file starts at 1.0.3. Earlier releases are only on the
 - A reconfigure flow, so an entry can be pointed at a different vaporizer
   without deleting and re-adding it.
 - Downloadable diagnostics for bug reports, with the Bluetooth address and
-  serial number redacted.
+  serial number redacted. They include the vaporizer's raw status registers
+  and error history — the same values the official app's **Analysis** button
+  collects for Storz & Bickel support.
 - Icons for the entities that do not get one from their device class.
 
 ### Fixed
