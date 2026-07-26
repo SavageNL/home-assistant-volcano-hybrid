@@ -56,6 +56,53 @@ Home Assistant instance running and already configured with the included
 [`configuration.yaml`](./config/configuration.yaml)
 file.
 
+## Releasing
+
+Releases are **tag-driven** — pushing a git tag is the only step. There is no
+manual version bump to commit; the version lives in the tag.
+
+1. Make sure `main` is green (lint + tests) and contains everything you want to
+   ship.
+2. Pick the next [semver](https://semver.org/) version and create a tag for it
+   (lightweight is fine), then push the tag:
+
+   ```bash
+   git tag 1.0.4
+   git push origin 1.0.4
+   ```
+
+3. Pushing the tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml),
+   which:
+   - checks out the tagged commit,
+   - derives the version from the tag name (a leading `v` is stripped, so both
+     `1.0.4` and `v1.0.4` work),
+   - stamps that version into `manifest.json` **in CI only** (never committed),
+   - zips `custom_components/volcano_hybrid/` into `volcano_hybrid.zip`, and
+   - publishes a GitHub release with that zip attached and auto-generated notes.
+
+HACS installs from the zip asset (`zip_release`/`filename` in
+[`hacs.json`](hacs.json)), so the `version` committed in `manifest.json` is only
+a placeholder that the build overwrites — you don't need to touch it.
+
+### Pre-releases
+
+A tag whose version contains `-alpha`, `-beta`, or `-rc` is published as a GitHub
+**pre-release**, which HACS only offers to users who have enabled showing beta
+versions. Use these to get a testable build out without promoting it to everyone:
+
+```bash
+git tag 1.0.4-rc1
+git push origin 1.0.4-rc1
+```
+
+### Notes
+
+- Git refuses to create a tag that already exists, so a version can't be reused
+  by accident.
+- To rebuild a release for a tag that already exists, run the **Publish Release**
+  workflow manually (Actions → Publish Release → Run workflow) and pass the tag
+  name.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under its MIT License.
