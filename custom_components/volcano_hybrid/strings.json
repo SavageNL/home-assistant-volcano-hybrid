@@ -107,6 +107,11 @@
       "auto_connect": {
         "name": "Auto connect"
       }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
+      }
     }
   },
   "exceptions": {

@@ -45,6 +45,11 @@
       "auto_connect": {
         "default": "mdi:bluetooth-audio"
       }
+    },
+    "update": {
+      "firmware": {
+        "default": "mdi:memory"
+      }
     }
   }
 }

@@ -29,6 +29,11 @@ This file starts at 1.0.3. Earlier releases are only on the
   serial number redacted. They include the vaporizer's raw status registers
   and error history — the same values the official app's **Analysis** button
   collects for Storz & Bickel support.
+- A **Firmware** update entity, reporting whether the vaporizer is running the
+  newest firmware this release knows about (currently V01.03). Installing it
+  still means using the official web app, so the entity links there rather than
+  offering a button. Home Assistant never contacts Storz & Bickel: the version
+  is recorded in the integration and refreshed by its maintainers.
 - Icons for the entities that do not get one from their device class.
 
 ### Fixed

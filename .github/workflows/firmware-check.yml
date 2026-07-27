@@ -1,0 +1,94 @@
+name: Firmware check
+
+# Watches the vendor endpoint the official web app uses to decide whether newer
+# Volcano Hybrid firmware exists, so the integration does not have to call it at
+# runtime. Opens an issue when the published version moves past the one recorded
+# in custom_components/volcano_hybrid/firmware.py, or when the endpoint starts
+# failing or changes shape.
+#
+# GitHub disables scheduled workflows on repositories with no activity for 60
+# days; if this stops running on a quiet repo, re-enable it from the Actions tab.
+
+on:
+  schedule:
+    # Mondays at 06:00 UTC. One request a week is enough to notice a firmware
+    # release promptly while keeping a broken endpoint from spamming the repo.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+  # Catches the check breaking on its own terms (a bad constant, a typo) at the
+  # time the change lands rather than on the next Monday.
+  pull_request:
+    branches:
+      - "main"
+    paths:
+      - "scripts/check_firmware.py"
+      - "custom_components/volcano_hybrid/firmware.py"
+      - ".github/workflows/firmware-check.yml"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  firmware:
+    name: "Published firmware version"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.14"
+
+      # Uses only the standard library, so there is nothing to install.
+      - name: Compare the recorded version against the vendor endpoint
+        id: check
+        continue-on-error: true
+        run: python3 scripts/check_firmware.py
+
+      - name: Open an issue
+        # Skipped when the script itself crashed without reporting a status;
+        # the gate below still fails the run in that case. Also skipped on pull
+        # requests, where the token is read-only — the failed run is the signal
+        # there, and the scheduled run files the issue.
+        if: >-
+          github.event_name != 'pull_request'
+          && steps.check.outcome == 'failure'
+          && steps.check.outputs.status != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Passed as environment variables rather than interpolated into the
+          # script: the body can quote a response body from outside this repo.
+          STATUS: ${{ steps.check.outputs.status }}
+          TITLE: ${{ steps.check.outputs.title }}
+          BODY: ${{ steps.check.outputs.body }}
+        run: |
+          set -euo pipefail
+          # Deduplicated per kind of problem, not just per check: an open
+          # "endpoint unreachable" issue must not silence a firmware release.
+          # While an issue of the same kind is open the weekly run files
+          # nothing and only goes red; closing one without fixing the cause
+          # lets the next run raise it again.
+          gh label create firmware-watch \
+            --description "Raised by the scheduled firmware endpoint check" \
+            --color FBCA04 --force
+          gh label create "firmware-watch:${STATUS}" \
+            --description "Firmware check result: ${STATUS}" \
+            --color FBCA04 --force
+          existing=$(gh issue list --label firmware-watch \
+            --label "firmware-watch:${STATUS}" --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Issue #${existing} already tracks a '${STATUS}' result; not filing a duplicate."
+            exit 0
+          fi
+          printf '%s\n' "$BODY" > "${RUNNER_TEMP}/firmware-issue.md"
+          gh issue create --title "$TITLE" \
+            --body-file "${RUNNER_TEMP}/firmware-issue.md" \
+            --label firmware-watch --label "firmware-watch:${STATUS}"
+
+      - name: Fail the run when the check reported a problem
+        if: steps.check.outcome == 'failure'
+        run: exit 1

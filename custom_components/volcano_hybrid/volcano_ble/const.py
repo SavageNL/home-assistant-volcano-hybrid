@@ -10,6 +10,7 @@ class VolcanoSensor(StrEnum):
     """Volcano sensor types."""
 
     VOLCANO = "volcano"
+    FIRMWARE = "firmware"
     CURRENT_AUTO_OFF_TIME = "current_auto_off_time"
     CURRENT_ON_TIME = "current_on_time"
     HEAT_TIME = "heat_time"

@@ -93,6 +93,11 @@
             "vibration": {
                 "name": "Vibration enabled"
             }
+        },
+        "update": {
+            "firmware": {
+                "name": "Firmware"
+            }
         }
     },
     "exceptions": {

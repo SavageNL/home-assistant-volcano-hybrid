@@ -35,6 +35,29 @@ Releases are tag-driven: push a git tag (e.g. `git tag 1.0.4 && git push origin 
 
 The release notes come from `CHANGELOG.md`: the workflow copies the `## [Unreleased]` section of the tagged commit into the release body, with GitHub's generated commit list appended. There is no version heading to pre-set — user-facing changes just need an `## [Unreleased]` entry as they land, and tagging remains the only release step. An empty section only warns (the tag already points at the commit, so it cannot be repaired after the fact). Renaming the block to the shipped version afterwards is optional bookkeeping that nothing depends on.
 
+## Firmware version tracking
+
+The vaporizer cannot report whether newer firmware exists — only Storz & Bickel's server knows, and the official web app asks it (`POST https://app.storz-bickel.com/firmwareHybrid`, body `version=true`, returning `[{"valid":1,"majorApplication":1,"minorApplication":3}]`). The integration deliberately does **not** call that endpoint: it would put a cloud dependency behind a `local_push` integration that otherwise works entirely offline.
+
+Instead `LATEST_KNOWN_FIRMWARE` in `custom_components/volcano_hybrid/firmware.py` records the newest firmware someone actually flashed and tested, and the `update` entity compares the device against it. `.github/workflows/firmware-check.yml` runs `scripts/check_firmware.py` weekly to poll the endpoint and opens an issue when the published version moves past the constant, when the endpoint fails, or when its JSON changes shape. Issues are labelled `firmware-watch` plus `firmware-watch:<status>` (`outdated`, `endpoint-error`, `schema-change`) and deduplicated on **both**, so at most one issue per kind of problem is open at a time and a stale endpoint failure cannot mask a firmware release. While one is open the weekly run only goes red; closing it without addressing the cause lets the next run raise it again.
+
+So the constant is only ever bumped by hand, after verifying the integration against the new firmware — that is the point of it. `latest_firmware_version` never reports a version older than what the device is running, so a user who flashed ahead of a release is not told to downgrade.
+
+### Why there is no install
+
+Not because it is impossible. "Web Bluetooth" is only the browser's API for the same GATT the integration already speaks; the flashing path is ordinary BLE and bleak could drive all of it. From `volcano.js`, it is roughly:
+
+1. Write uint16 `4711` to `10100011` (the code-number characteristic — the one UUID the integration does not otherwise touch), then send `getBootStatus()` to reboot into the bootloader.
+2. Talk a UART-style telegram protocol over service `00000002-1989-0108-1234-123456789abc`, with notifications parsed by `handleUARTBootloader`. Telegrams are built by `generateTelegram`/`calcCheckValue` and include `Rsm`, `Rsp` (page flag register), `Wc <checksum>` and `Wl ` (exit boot mode); the exact semantics still need reversing.
+3. Fetch the binary from `POST firmwareHybrid` with `version=false`, which returns hex `firmware` plus `checksumOld`/`checksumNew`, split into 1024-byte pages, then chip-erase and write pages with write-without-response, verifying with a CRC.
+
+The reasons not to do it are risk and licensing, and they should be argued on those terms rather than by pretending it cannot be done:
+
+- A flash interrupted partway is the worst failure this integration could cause. The vendor app holds one direct browser connection and tells the user to keep the device powered; Home Assistant may be going through an ESPHome Bluetooth proxy with its own reconnect and retry behaviour, which is a much less controlled link for a multi-minute write. Bootloader mode is at least detectable and resumable (the bootloader version string contains `BL`), so a failed flash is recoverable rather than terminal — but recovery still means a browser.
+- The firmware binary is Storz & Bickel's, served from their endpoint. Downloading and pushing it from third-party software is a licensing question, not just a technical one.
+
+If it is ever built, it belongs behind an explicit opt-in, should refuse to start over a proxied connection, and needs the CRC and page sequence verified against a device that can be recovered.
+
 ## Architecture
 
 Two layers, deliberately separated:

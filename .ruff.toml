@@ -26,6 +26,10 @@ ignore = [
 ]
 
 [lint.per-file-ignores]
+"scripts/**" = [
+    "INP001", # Standalone CI programs, deliberately not an importable package
+    "T201", # They report to the workflow log on stdout
+]
 "tests/**" = [
     "S101", # Tests assert via assert statements
     "PLR2004", # Tests compare against literal expected values
