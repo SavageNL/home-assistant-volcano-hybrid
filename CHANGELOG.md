@@ -10,10 +10,12 @@ is pushed, so add entries to it as changes land and write them for the people
 installing the integration rather than for the commit log. There is no version
 to set. See [CONTRIBUTING.md](CONTRIBUTING.md#the-changelog).
 
-This file starts at 1.0.3. Earlier releases are only on the
+This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 [GitHub releases page](https://github.com/SavageNL/home-assistant-volcano-hybrid/releases).
 
 ## [Unreleased]
+
+## [1.0.4] - 2026-08-01
 
 ### Added
 
