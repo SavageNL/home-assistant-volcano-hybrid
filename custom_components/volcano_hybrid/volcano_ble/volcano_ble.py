@@ -51,8 +51,10 @@ CHARACTERISTIC_FIRMWARE = "10100003-5354-4f52-5a26-4249434b454c"  # 3
 CHARACTERISTIC_HIST1 = "10100015-5354-4f52-5a26-4249434b454c"  # 3
 CHARACTERISTIC_HIST2 = "10100016-5354-4f52-5a26-4249434b454c"  # 3
 
+MASK_PRJSTAT1_VOLCANO_ACTUATOR_FAULT = 16
 MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA = 32
 MASK_PRJSTAT1_VOLCANO_ENABLE_AUTOBLESHUTDOWN = 512
+MASK_PRJSTAT1_VOLCANO_TEMPERATURE_REACHED = 1024
 MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE = 8192
 MASK_PRJSTAT1_VOLCANO_ERR = 16408
 MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA = 512
@@ -251,6 +253,14 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             self.data.fan = bool(prj1v & MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE)
             self.data.auto_shutdown = bool(
                 prj1v & MASK_PRJSTAT1_VOLCANO_ENABLE_AUTOBLESHUTDOWN
+            )
+            # Set once the heater has reached the setpoint and cleared again
+            # when the device goes off or the setpoint is raised out of reach.
+            self.data.at_temperature = bool(
+                prj1v & MASK_PRJSTAT1_VOLCANO_TEMPERATURE_REACHED
+            )
+            self.data.actuator_fault = bool(
+                prj1v & MASK_PRJSTAT1_VOLCANO_ACTUATOR_FAULT
             )
             self.data.prv1_error = bool(prj1v & MASK_PRJSTAT1_VOLCANO_ERR)
 

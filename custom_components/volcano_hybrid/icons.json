@@ -1,6 +1,9 @@
 {
   "entity": {
     "binary_sensor": {
+      "at_temperature": {
+        "default": "mdi:thermometer-check"
+      },
       "auto_shutdown": {
         "default": "mdi:power"
       }
@@ -30,6 +33,21 @@
       },
       "heat_time": {
         "default": "mdi:timer"
+      },
+      "prj1": {
+        "default": "mdi:chip"
+      },
+      "prj2": {
+        "default": "mdi:chip"
+      },
+      "prj3": {
+        "default": "mdi:chip"
+      },
+      "hist1": {
+        "default": "mdi:history"
+      },
+      "hist2": {
+        "default": "mdi:history"
       }
     },
     "switch": {

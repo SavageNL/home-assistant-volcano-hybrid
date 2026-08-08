@@ -8,16 +8,10 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant
 
+from .const import format_register
 from .coordinator import VolcanoHybridConfigEntry
 
 TO_REDACT = {CONF_ADDRESS, "connected_addr", "serial_number"}
-
-
-def _as_hex(value: int | None) -> str | None:
-    """Format a status register the way the vendor app's report does."""
-    if value is None:
-        return None
-    return f"0x{value:04x}"
 
 
 async def async_get_config_entry_diagnostics(
@@ -50,7 +44,9 @@ async def async_get_config_entry_diagnostics(
                 "fan": data.fan,
                 "fan_state": data.fan_state,
                 "is_assumed": data.is_assumed,
+                "at_temperature": data.at_temperature,
                 "auto_shutdown": data.auto_shutdown,
+                "actuator_fault": data.actuator_fault,
                 "prv1_error": data.prv1_error,
                 "prv2_error": data.prv2_error,
                 "showing_celsius": data.showing_celsius,
@@ -67,9 +63,9 @@ async def async_get_config_entry_diagnostics(
             # bits the integration does not interpret, which is exactly what
             # makes them worth attaching to a bug report.
             "registers": {
-                "prj1": _as_hex(data.prj1),
-                "prj2": _as_hex(data.prj2),
-                "prj3": _as_hex(data.prj3),
+                "prj1": format_register(data.prj1),
+                "prj2": format_register(data.prj2),
+                "prj3": format_register(data.prj3),
                 "hist1": data.hist1,
                 "hist2": data.hist2,
             },

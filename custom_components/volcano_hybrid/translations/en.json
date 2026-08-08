@@ -34,11 +34,23 @@
     },
     "entity": {
         "binary_sensor": {
+            "actuator_fault": {
+                "name": "Heater/pump fault"
+            },
+            "at_temperature": {
+                "name": "Ready"
+            },
             "auto_shutdown": {
                 "name": "Auto shutdown enabled"
             },
             "connected": {
                 "name": "Connected"
+            },
+            "fan": {
+                "name": "Pump running"
+            },
+            "heater": {
+                "name": "Heater running"
             },
             "prv1_error": {
                 "name": "Prv1 error"
@@ -75,6 +87,21 @@
             },
             "heat_time": {
                 "name": "Total heat time"
+            },
+            "hist1": {
+                "name": "Error history 1"
+            },
+            "hist2": {
+                "name": "Error history 2"
+            },
+            "prj1": {
+                "name": "Status register 1"
+            },
+            "prj2": {
+                "name": "Status register 2"
+            },
+            "prj3": {
+                "name": "Status register 3"
             },
             "rssi": {
                 "name": "Signal strength"

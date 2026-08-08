@@ -32,6 +32,8 @@ async def test_diagnostics(
     data.heater = True
     data.fan = False
     data.shut_off = 30
+    data.at_temperature = True
+    data.actuator_fault = False
 
     diagnostics = await async_get_config_entry_diagnostics(hass, init_integration)
 
@@ -48,6 +50,8 @@ async def test_diagnostics(
     assert diagnostics["state"]["fan"] is False
     assert diagnostics["state"]["shut_off"] == 30
     assert diagnostics["state"]["is_assumed"] is False
+    assert diagnostics["state"]["at_temperature"] is True
+    assert diagnostics["state"]["actuator_fault"] is False
 
 
 async def test_diagnostics_include_raw_registers_and_history(

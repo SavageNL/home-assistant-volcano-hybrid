@@ -48,6 +48,18 @@
   },
   "entity": {
     "binary_sensor": {
+      "at_temperature": {
+        "name": "Ready"
+      },
+      "heater": {
+        "name": "Heater running"
+      },
+      "fan": {
+        "name": "Pump running"
+      },
+      "actuator_fault": {
+        "name": "Heater/pump fault"
+      },
       "auto_shutdown": {
         "name": "Auto shutdown enabled"
       },
@@ -92,6 +104,21 @@
       },
       "connected_addr": {
         "name": "Connected address"
+      },
+      "prj1": {
+        "name": "Status register 1"
+      },
+      "prj2": {
+        "name": "Status register 2"
+      },
+      "prj3": {
+        "name": "Status register 3"
+      },
+      "hist1": {
+        "name": "Error history 1"
+      },
+      "hist2": {
+        "name": "Error history 2"
       }
     },
     "switch": {

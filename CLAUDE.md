@@ -45,11 +45,7 @@ So the constant is only ever bumped by hand, after verifying the integration aga
 
 ### Why there is no install
 
-Not because it is impossible. "Web Bluetooth" is only the browser's API for the same GATT the integration already speaks; the flashing path is ordinary BLE and bleak could drive all of it. From `volcano.js`, it is roughly:
-
-1. Write uint16 `4711` to `10100011` (the code-number characteristic — the one UUID the integration does not otherwise touch), then send `getBootStatus()` to reboot into the bootloader.
-2. Talk a UART-style telegram protocol over service `00000002-1989-0108-1234-123456789abc`, with notifications parsed by `handleUARTBootloader`. Telegrams are built by `generateTelegram`/`calcCheckValue` and include `Rsm`, `Rsp` (page flag register), `Wc <checksum>` and `Wl ` (exit boot mode); the exact semantics still need reversing.
-3. Fetch the binary from `POST firmwareHybrid` with `version=false`, which returns hex `firmware` plus `checksumOld`/`checksumNew`, split into 1024-byte pages, then chip-erase and write pages with write-without-response, verifying with a CRC.
+Not because it is impossible. "Web Bluetooth" is only the browser's API for the same GATT the integration already speaks; the flashing path is ordinary BLE and bleak could drive all of it. `VOLCANO_BLE_SPEC.md` §6 documents the whole bootloader protocol — the unlock write, the telegram framing and command set, and the page/CRC sequence.
 
 The reasons not to do it are risk and licensing, and they should be argued on those terms rather than by pretending it cannot be done:
 
@@ -59,6 +55,12 @@ The reasons not to do it are risk and licensing, and they should be argued on th
 If it is ever built, it belongs behind an explicit opt-in, should refuse to start over a proxied connection, and needs the CRC and page sequence verified against a device that can be recovered.
 
 ## Architecture
+
+`VOLCANO_BLE_SPEC.md` in the repo root is the protocol reference: every service and
+characteristic, value encodings, the PRJSTAT1/2/3 bit maps (including which bits are still
+undecoded and how to settle them), and the firmware-update protocol. Keep it in sync when
+the protocol layer learns something new about the device, and cite its confidence tags —
+CONFIRMED / STRONG / SPECULATIVE — rather than promoting a guess.
 
 Two layers, deliberately separated:
 

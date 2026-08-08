@@ -59,6 +59,10 @@ class VolcanoHybridData:
         self._heater: bool | None = None
         self._fan: bool | None = None
         self.auto_shutdown: bool | None = None
+        # The device's own "setpoint reached" signal, so nothing has to compare
+        # the current temperature against the target to know it is ready.
+        self.at_temperature: bool | None = None
+        self.actuator_fault: bool | None = None
         self.prv1_error: bool | None = None
 
         # Prv2 attributes

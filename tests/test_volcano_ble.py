@@ -30,6 +30,7 @@ from custom_components.volcano_hybrid.volcano_ble.volcano_ble import (
     CHARACTERISTIC_SERIAL_NUMBER,
     CHARACTERISTIC_SET_TEMP,
     CHARACTERISTIC_SHUT_OFF,
+    MASK_PRJSTAT1_VOLCANO_ACTUATOR_FAULT,
     MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA,
     MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE,
     MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING,
@@ -212,6 +213,45 @@ async def test_prj1_notification_updates_raw_register() -> None:
 
     assert volcano.data.prj1 == MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA
     assert volcano.data.fan is False
+
+
+async def test_prj1_decodes_temperature_reached_and_actuator_fault() -> None:
+    """
+    The status register carries the device's own "setpoint reached" signal.
+
+    Observed live: heating below the setpoint reports 0x0023 and reaching it
+    reports 0x0623, so bits 9 (auto shutdown) and 10 (reached) flip together
+    at the setpoint, not at heat start.
+    """
+    values = default_values()
+    values[CHARACTERISTIC_PRJ1V] = (0x0023).to_bytes(2, "little")
+    client = FakeBleakClient(values)
+    volcano, _, _ = await connect(client)
+
+    assert volcano.data.heater is True
+    assert volcano.data.at_temperature is False
+    assert volcano.data.auto_shutdown is False
+    assert volcano.data.actuator_fault is False
+
+    callback = client.notify_callbacks[CHARACTERISTIC_PRJ1V]
+    await callback(
+        FakeCharacteristic(CHARACTERISTIC_PRJ1V),
+        bytearray((0x0623).to_bytes(2, "little")),
+    )
+
+    assert volcano.data.at_temperature is True
+    assert volcano.data.auto_shutdown is True
+
+    # Bit 4 is the heater/pump feedback fault; it is part of the ERR mask too.
+    await callback(
+        FakeCharacteristic(CHARACTERISTIC_PRJ1V),
+        bytearray(
+            (0x0623 | MASK_PRJSTAT1_VOLCANO_ACTUATOR_FAULT).to_bytes(2, "little")
+        ),
+    )
+
+    assert volcano.data.actuator_fault is True
+    assert volcano.data.prv1_error is True
 
 
 async def test_notifications_update_data() -> None:

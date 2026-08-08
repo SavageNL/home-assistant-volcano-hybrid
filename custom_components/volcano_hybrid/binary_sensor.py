@@ -18,6 +18,32 @@ from .volcano_ble import VolcanoSensor
 PARALLEL_UPDATES = 0
 
 SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
+    VolcanoSensor.AT_TEMPERATURE: BinarySensorEntityDescription(
+        key=VolcanoSensor.AT_TEMPERATURE,
+        translation_key=VolcanoSensor.AT_TEMPERATURE,
+        entity_registry_enabled_default=True,
+    ),
+    VolcanoSensor.HEATER_ACTIVE: BinarySensorEntityDescription(
+        key=VolcanoSensor.HEATER_ACTIVE,
+        translation_key=VolcanoSensor.HEATER_ACTIVE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        device_class=BinarySensorDeviceClass.HEAT,
+        entity_registry_enabled_default=False,
+    ),
+    VolcanoSensor.PUMP_ACTIVE: BinarySensorEntityDescription(
+        key=VolcanoSensor.PUMP_ACTIVE,
+        translation_key=VolcanoSensor.PUMP_ACTIVE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        device_class=BinarySensorDeviceClass.RUNNING,
+        entity_registry_enabled_default=False,
+    ),
+    VolcanoSensor.ACTUATOR_FAULT: BinarySensorEntityDescription(
+        key=VolcanoSensor.ACTUATOR_FAULT,
+        translation_key=VolcanoSensor.ACTUATOR_FAULT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        entity_registry_enabled_default=False,
+    ),
     VolcanoSensor.AUTO_SHUTDOWN: BinarySensorEntityDescription(
         key=VolcanoSensor.AUTO_SHUTDOWN,
         translation_key=VolcanoSensor.AUTO_SHUTDOWN,
@@ -57,6 +83,10 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     async_add_entities(
         [
+            VolcanoBinarySensorEntity(coordinator, VolcanoSensor.AT_TEMPERATURE),
+            VolcanoBinarySensorEntity(coordinator, VolcanoSensor.HEATER_ACTIVE),
+            VolcanoBinarySensorEntity(coordinator, VolcanoSensor.PUMP_ACTIVE),
+            VolcanoBinarySensorEntity(coordinator, VolcanoSensor.ACTUATOR_FAULT),
             VolcanoBinarySensorEntity(coordinator, VolcanoSensor.AUTO_SHUTDOWN),
             VolcanoBinarySensorEntity(coordinator, VolcanoSensor.PRV1_ERROR),
             VolcanoBinarySensorEntity(coordinator, VolcanoSensor.PRV2_ERROR),

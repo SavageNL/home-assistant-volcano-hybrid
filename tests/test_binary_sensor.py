@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from homeassistant.const import STATE_OFF, STATE_ON
+from homeassistant.const import STATE_OFF, STATE_ON, EntityCategory
+from homeassistant.helpers import entity_registry as er
 
 from . import FakeVolcanoBLE, get_entity_id
 
@@ -45,6 +46,71 @@ async def test_binary_sensors(
     connected = hass.states.get(get_entity_id(hass, "binary_sensor", "connected"))
     assert connected is not None
     assert connected.state == STATE_ON
+
+
+async def test_status_binary_sensors(
+    hass: HomeAssistant,
+    entity_registry_enabled_by_default: None,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """The decoded status bits are exposed as binary sensors."""
+    mock_volcano.connected = True
+    data = mock_volcano.data
+    data.at_temperature = True
+    data.heater = True
+    data.fan = False
+    data.actuator_fault = False
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    ready = hass.states.get(get_entity_id(hass, "binary_sensor", "at_temperature"))
+    assert ready is not None
+    assert ready.state == STATE_ON
+
+    heater = hass.states.get(get_entity_id(hass, "binary_sensor", "heater"))
+    assert heater is not None
+    assert heater.state == STATE_ON
+
+    pump = hass.states.get(get_entity_id(hass, "binary_sensor", "fan"))
+    assert pump is not None
+    assert pump.state == STATE_OFF
+
+    fault = hass.states.get(get_entity_id(hass, "binary_sensor", "actuator_fault"))
+    assert fault is not None
+    assert fault.state == STATE_OFF
+
+    data.at_temperature = False
+    data.actuator_fault = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    ready = hass.states.get(get_entity_id(hass, "binary_sensor", "at_temperature"))
+    assert ready is not None
+    assert ready.state == STATE_OFF
+
+    fault = hass.states.get(get_entity_id(hass, "binary_sensor", "actuator_fault"))
+    assert fault is not None
+    assert fault.state == STATE_ON
+
+
+async def test_ready_sensor_is_enabled_by_default(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Ready is a user-facing entity; the other status bits are diagnostics."""
+    registry = er.async_get(hass)
+
+    ready = registry.async_get(get_entity_id(hass, "binary_sensor", "at_temperature"))
+    assert ready is not None
+    assert ready.disabled_by is None
+    assert ready.entity_category is None
+
+    for key in ("heater", "fan", "actuator_fault"):
+        entry = registry.async_get(get_entity_id(hass, "binary_sensor", key))
+        assert entry is not None, key
+        assert entry.disabled_by is er.RegistryEntryDisabler.INTEGRATION, key
+        assert entry.entity_category is EntityCategory.DIAGNOSTIC, key
 
 
 async def test_connected_sensor_follows_connection(

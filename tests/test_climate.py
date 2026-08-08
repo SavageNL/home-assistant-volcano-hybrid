@@ -9,10 +9,12 @@ from bleak import BleakError
 from homeassistant.components.climate import (
     ATTR_CURRENT_TEMPERATURE,
     ATTR_FAN_MODE,
+    ATTR_HVAC_ACTION,
     ATTR_HVAC_MODE,
     SERVICE_SET_FAN_MODE,
     SERVICE_SET_HVAC_MODE,
     SERVICE_SET_TEMPERATURE,
+    HVACAction,
     HVACMode,
 )
 from homeassistant.components.climate import (
@@ -98,6 +100,49 @@ async def test_climate_unknown_before_device_data(
     assert state.attributes[ATTR_CURRENT_TEMPERATURE] is None
     assert state.attributes[ATTR_TEMPERATURE] is None
     assert state.attributes[ATTR_FAN_MODE] is None
+
+
+async def test_climate_hvac_action_follows_the_device(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """The action reports heating until the device says it reached the setpoint."""
+    entity_id = get_entity_id(hass, "climate", "volcano")
+
+    # Connected, but no status register read yet: nothing is claimed. Home
+    # Assistant leaves the attribute out entirely while the action is unknown.
+    mock_volcano.connected = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert ATTR_HVAC_ACTION not in state.attributes
+
+    data = mock_volcano.data
+    data.heater = False
+    data.at_temperature = False
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.OFF
+
+    # Heating up, still below the setpoint.
+    data.heater = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.HEATING
+
+    # The device reports the setpoint was reached: holding, not heating.
+    data.at_temperature = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.IDLE
 
 
 async def test_climate_assumed_state(

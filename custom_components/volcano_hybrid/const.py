@@ -20,6 +20,20 @@ DEFAULT_AUTO_CONNECT_DELAY = 1.0
 # guarantee a fresh advertisement (the device advertises ~every 10s when idle).
 DEFAULT_DELAYED_RECONNECT_DELAY = 11.0
 
+
+def format_register(value: int | None) -> str | None:
+    """
+    Format a status register the way the vendor app's report does.
+
+    The registers are bit fields, so they are reported as the 16-bit hex word
+    the bit maps in VOLCANO_BLE_SPEC.md are written against; a decimal number
+    would have to be converted before it says anything.
+    """
+    if value is None:
+        return None
+    return f"0x{value:04x}"
+
+
 __all__ = [
     "CONF_AUTO_CONNECT_DELAY",
     "CONF_DELAYED_RECONNECT_DELAY",
@@ -29,4 +43,5 @@ __all__ = [
     "VOLCANO_HYBRID_MAX_TEMP",
     "VOLCANO_HYBRID_MIN_DISPLAY_TEMP",
     "VOLCANO_HYBRID_MIN_TEMP",
+    "format_register",
 ]

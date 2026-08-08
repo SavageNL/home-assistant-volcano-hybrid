@@ -10,6 +10,7 @@ from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityDescription,
     ClimateEntityFeature,
+    HVACAction,
     HVACMode,
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
@@ -81,8 +82,17 @@ class VolcanoHybridClimate(VolcanoHybridEntity, ClimateEntity):
         heater_state = data.heater_state
         if heater_state is None:
             self._attr_hvac_mode = None
+            self._attr_hvac_action = None
         else:
             self._attr_hvac_mode = HVACMode.HEAT if heater_state else HVACMode.OFF
+            # The device reports reaching the setpoint itself, so the card shows
+            # "Idle" while it holds temperature instead of comparing readings.
+            if not heater_state:
+                self._attr_hvac_action = HVACAction.OFF
+            elif data.at_temperature:
+                self._attr_hvac_action = HVACAction.IDLE
+            else:
+                self._attr_hvac_action = HVACAction.HEATING
 
         fan_state = data.fan_state
         if fan_state is None:

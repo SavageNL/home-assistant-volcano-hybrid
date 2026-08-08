@@ -34,6 +34,9 @@ It shows the following information and allows these controls:
 - Set directly or increase value in 1 degree steps
 - Enable/disable heating
 - Enable/disable fan
+- Whether it is heating up or holding temperature (the `hvac_action` attribute, shown as *Heating*/*Idle* on the thermostat card)
+
+There is also a **Ready** binary sensor, which is on once the vaporizer reports it reached the target temperature. It comes from the device's own "temperature reached" signal, so it is more reliable than comparing the current temperature to the target in a template.
 
 Additionally, there are the following configuration/diagnostic entities:
 - The auto off time setting (configurable)
@@ -41,12 +44,21 @@ Additionally, there are the following configuration/diagnostic entities:
 - Whether the device is showing temperature in Celsius or Fahrenheit (configurable)
 - Whether vibration is enabled (configurable)
 - The total heating time
-- Whether the auto off timer is enabled (this is essentially the same as the heating state)
+- Whether the auto off timer is enabled (this arms when the target temperature is reached)
+- Whether the heater is running and whether the pump is running
+- A heater/pump fault sensor (the device reports an actuator did not reach the state it was commanded into)
+- The raw status registers 1/2/3 and error history 1/2, as hex, for diagnosing faults (see [the BLE spec](VOLCANO_BLE_SPEC.md))
 - The device connected state
 - A reconnect button (connects immediately)
 - A delayed reconnect button (disconnects, then reconnects after a short delay so a better Bluetooth path can be chosen)
 - An auto-connect switch (enable/disable automatic connecting; see [Connecting](#connecting))
 - The rssi from the last ble message
+
+Most of these are disabled by default; enable them under the device page in **Settings** → **Devices & services**.
+
+## How the device is controlled
+
+The Bluetooth protocol is documented in [**VOLCANO_BLE_SPEC.md**](VOLCANO_BLE_SPEC.md): every service and characteristic, how the values are encoded, the meaning of each bit in the status registers, and the firmware-update protocol (which this integration deliberately does not implement).
 
 ## Warning
 
