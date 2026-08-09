@@ -102,12 +102,19 @@ async def test_climate_unknown_before_device_data(
     assert state.attributes[ATTR_FAN_MODE] is None
 
 
-async def test_climate_hvac_action_follows_the_device(
+async def test_climate_hvac_action_tracks_the_temperature_gap(
     hass: HomeAssistant,
     init_integration: MockConfigEntry,
     mock_volcano: FakeVolcanoBLE,
 ) -> None:
-    """The action reports heating until the device says it reached the setpoint."""
+    """
+    Heating is reported from the temperatures, not the device's "reached" bit.
+
+    The device's setpoint-reached signal only clears once the setpoint moves
+    more than 2 degrees above the current reading, so it keeps claiming to be
+    at temperature through small adjustments. Nothing is reported while the
+    heater holds temperature, which leaves the card showing the mode.
+    """
     entity_id = get_entity_id(hass, "climate", "volcano")
 
     # Connected, but no status register read yet: nothing is claimed. Home
@@ -121,28 +128,100 @@ async def test_climate_hvac_action_follows_the_device(
 
     data = mock_volcano.data
     data.heater = False
-    data.at_temperature = False
     mock_volcano.data_updated()
     await hass.async_block_till_done()
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.OFF
 
-    # Heating up, still below the setpoint.
+    # Switched on, but the temperatures have not been read yet.
     data.heater = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert ATTR_HVAC_ACTION not in state.attributes
+
+    # Heating up, still below the setpoint.
+    data.current_temp = 100
+    data.set_temp = 180
+    data.at_temperature = False
     mock_volcano.data_updated()
     await hass.async_block_till_done()
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.HEATING
 
-    # The device reports the setpoint was reached: holding, not heating.
+    # Holding at the setpoint: no action, so the card falls back to the mode.
+    data.current_temp = 180
     data.at_temperature = True
     mock_volcano.data_updated()
     await hass.async_block_till_done()
     state = hass.states.get(entity_id)
     assert state is not None
+    assert ATTR_HVAC_ACTION not in state.attributes
+
+    # Regression: a one degree raise. The device still reports having reached
+    # the setpoint, but it is heating, and that is what has to be shown.
+    data.set_temp = 181
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.HEATING
+
+    # Setpoint dropped below the current reading: coasting down, not heating.
+    data.set_temp = 160
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert ATTR_HVAC_ACTION not in state.attributes
+
+
+async def test_climate_hvac_action_idles_while_cooling(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """
+    A switched-off but still hot device idles while its display stays lit.
+
+    The device gives no signal for this: its status register reads all zeroes
+    the instant the heater goes off, however hot the block still is. It is
+    inferred from the temperature the device keeps reporting and the setting
+    that decides whether the display stays on for it.
+    """
+    entity_id = get_entity_id(hass, "climate", "volcano")
+
+    mock_volcano.connected = True
+    data = mock_volcano.data
+    data.heater = False
+    data.current_temp = 170
+    data.display_on_cooling = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == HVACMode.OFF
     assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.IDLE
+
+    # Cooled past the point where the device blanks its display.
+    data.current_temp = 39
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.OFF
+
+    # With the display set to stay off, there is nothing to idle for.
+    data.current_temp = 170
+    data.display_on_cooling = False
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.OFF
 
 
 async def test_climate_assumed_state(

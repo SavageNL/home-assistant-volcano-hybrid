@@ -34,9 +34,11 @@ It shows the following information and allows these controls:
 - Set directly or increase value in 1 degree steps
 - Enable/disable heating
 - Enable/disable fan
-- Whether it is heating up or holding temperature (the `hvac_action` attribute, shown as *Heating*/*Idle* on the thermostat card)
+- Whether it is heating up, holding temperature, or cooling down after being switched off (the `hvac_action` attribute: the card shows *Heating* while it works towards the target, *Heat* once it is holding, and *Idle* while it cools with its display still lit)
 
-There is also a **Ready** binary sensor, which is on once the vaporizer reports it reached the target temperature. It comes from the device's own "temperature reached" signal, so it is more reliable than comparing the current temperature to the target in a template.
+There is also a **Ready** binary sensor, which is on once the vaporizer reports it reached the target temperature. It is the device's own "temperature reached" signal passed through unchanged, which is what makes it the right thing to wait on: it is the same signal that drives the device's vibration alert, so it turns on exactly when the Volcano tells you it is ready.
+
+Being the device's own signal, it also inherits the device's idea of "reached": a target change of 2 °C or less never turns it off, and it stays on while the device coasts down after you lower the target or switch the heater off. For "is it actually working towards the target right now", use `hvac_action` instead.
 
 Additionally, there are the following configuration/diagnostic entities:
 - The auto off time setting (configurable)

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from .const import VOLCANO_HYBRID_MAX_TEMP, VOLCANO_HYBRID_MIN_TEMP
+from .const import (
+    VOLCANO_HYBRID_DISPLAY_OFF_TEMP,
+    VOLCANO_HYBRID_MAX_TEMP,
+    VOLCANO_HYBRID_MIN_TEMP,
+)
 
 
 class VolcanoHybridDataStatusProvider:
@@ -91,6 +95,43 @@ class VolcanoHybridData:
     def is_on(self) -> bool:
         """Check if the device is on."""
         return bool(self.fan or self.heater)
+
+    @property
+    def is_heating(self) -> bool | None:
+        """
+        Whether the heater is working towards a setpoint it has not reached.
+
+        The device has no signal for its heating element: PRJSTAT1 does not
+        change at all while it holds temperature, and its "setpoint reached"
+        bit only clears once the setpoint moves more than two degrees above
+        the current reading, so it keeps claiming to be at temperature through
+        small adjustments. Comparing the two temperatures the device does
+        report is finer grained and works in both directions.
+        """
+        heater = self.heater_state
+        if heater is None:
+            return None
+        if not heater:
+            return False
+        if self.current_temp is None or self.set_temp_state is None:
+            return None
+        return self.current_temp < self.set_temp_state
+
+    @property
+    def is_cooling(self) -> bool:
+        """
+        Whether the heater is off but the device is still cooling down, lit.
+
+        This one is inferred rather than read. PRJSTAT1 reads all zeroes the
+        instant the heater is switched off, however hot the block still is, so
+        the only things left to go on are the temperature the device keeps
+        reporting and the setting deciding whether its display stays on for it.
+        """
+        if self.heater_state is not False or not self.display_on_cooling:
+            return False
+        if self.current_temp is None:
+            return False
+        return self.current_temp >= VOLCANO_HYBRID_DISPLAY_OFF_TEMP
 
     def clear_open_writes(self) -> None:
         """Remove all open writes."""

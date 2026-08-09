@@ -19,10 +19,14 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 
 - A **Ready** binary sensor, on once the vaporizer reports it reached the target
   temperature. This is the device's own signal rather than a comparison of the
-  current temperature against the target, so it is exact — no template helper
-  needed.
-- The climate entity now reports whether it is *Heating* or *Idle* (holding
-  temperature), so the thermostat card shows what the vaporizer is doing.
+  current temperature against the target — the same one that drives its
+  vibration alert, so it turns on exactly when the Volcano says it is ready. It
+  follows the device's own idea of "reached", which means a target change of
+  2 °C or less does not turn it off, and it stays on while the device cools
+  down.
+- The thermostat card now shows **Heating** while the vaporizer is working
+  towards its target, **Heat** once it is holding temperature, and **Idle**
+  while it cools down with its display still lit after being switched off.
 - Diagnostic entities for the decoded device status, all disabled by default:
   **Heater running**, **Pump running** and a **Heater/pump fault** sensor that
   turns on when the vaporizer reports the heater or pump did not reach the

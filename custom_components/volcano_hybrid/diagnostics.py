@@ -45,6 +45,8 @@ async def async_get_config_entry_diagnostics(
                 "fan_state": data.fan_state,
                 "is_assumed": data.is_assumed,
                 "at_temperature": data.at_temperature,
+                "is_heating": data.is_heating,
+                "is_cooling": data.is_cooling,
                 "auto_shutdown": data.auto_shutdown,
                 "actuator_fault": data.actuator_fault,
                 "prv1_error": data.prv1_error,

@@ -39,7 +39,12 @@ from custom_components.volcano_hybrid.volcano_ble.volcano_ble import (
     VolcanoBLE,
 )
 
-from . import VOLCANO_ADDRESS, make_ble_device, make_service_info
+from . import (
+    VOLCANO_ADDRESS,
+    FakeVolcanoBLE,
+    make_ble_device,
+    make_service_info,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -47,6 +52,33 @@ if TYPE_CHECKING:
 ESTABLISH_CONNECTION = (
     "custom_components.volcano_hybrid.volcano_ble.volcano_ble.establish_connection"
 )
+
+
+def test_is_heating_and_is_cooling_without_readings() -> None:
+    """Neither derived state claims anything the device has not reported."""
+    data = FakeVolcanoBLE().data
+
+    # Nothing read yet: the heater state is unknown, so heating is too.
+    assert data.is_heating is None
+    assert data.is_cooling is False
+
+    # Heater on, but no temperatures to compare yet.
+    data.heater = True
+    assert data.is_heating is None
+
+    # Heater off is enough on its own: it cannot be heating.
+    data.heater = False
+    data.current_temp = 170
+    data.set_temp = 180
+    assert data.is_heating is False
+
+    # Cooling needs a temperature to compare against, even with the display
+    # set to stay on.
+    data.display_on_cooling = True
+    assert data.is_cooling is True
+    data.current_temp = 0
+    assert data.current_temp is None
+    assert data.is_cooling is False
 
 
 class FakeCharacteristic:

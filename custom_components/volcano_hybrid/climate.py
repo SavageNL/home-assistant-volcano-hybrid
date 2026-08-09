@@ -83,16 +83,19 @@ class VolcanoHybridClimate(VolcanoHybridEntity, ClimateEntity):
         if heater_state is None:
             self._attr_hvac_mode = None
             self._attr_hvac_action = None
+        elif heater_state:
+            self._attr_hvac_mode = HVACMode.HEAT
+            # Only the heating action is reported while the heater is on. With
+            # no action set the card falls back to naming the mode, so holding
+            # at temperature reads as "Heat" rather than "Idle".
+            self._attr_hvac_action = HVACAction.HEATING if data.is_heating else None
         else:
-            self._attr_hvac_mode = HVACMode.HEAT if heater_state else HVACMode.OFF
-            # The device reports reaching the setpoint itself, so the card shows
-            # "Idle" while it holds temperature instead of comparing readings.
-            if not heater_state:
-                self._attr_hvac_action = HVACAction.OFF
-            elif data.at_temperature:
-                self._attr_hvac_action = HVACAction.IDLE
-            else:
-                self._attr_hvac_action = HVACAction.HEATING
+            self._attr_hvac_mode = HVACMode.OFF
+            # Switched off but still hot enough to keep its display lit, which
+            # the device does not report and has to be inferred.
+            self._attr_hvac_action = (
+                HVACAction.IDLE if data.is_cooling else HVACAction.OFF
+            )
 
         fan_state = data.fan_state
         if fan_state is None:

@@ -119,13 +119,13 @@ change is pushed.
 
 | Bit | Mask | Meaning | Confidence |
 |---:|---:|---|---|
-| 0 | `0x0001` | Heater running | CONFIRMED (live) |
-| 1 | `0x0002` | Heater running (companion bit, tracks bit 0) | CONFIRMED (live) |
+| 0 | `0x0001` | Heater on — the switch, not the element (see below) | CONFIRMED (live) |
+| 1 | `0x0002` | Heater on (companion bit, tracks bit 0) | CONFIRMED (live) |
 | 3 | `0x0008` | Error bit A — cause unknown | error CONFIRMED, cause SPECULATIVE |
 | 4 | `0x0010` | **Actuator feedback fault** — heater or pump did not reach the state it was commanded into | STRONG |
 | 5 | `0x0020` | Heater enabled (`HEIZUNG_ENA`) — the heater switch state | CONFIRMED |
-| 9 | `0x0200` | Auto-BLE-shutdown armed | CONFIRMED (live) |
-| 10 | `0x0400` | **Setpoint reached** — the device is at temperature | CONFIRMED (live) |
+| 9 | `0x0200` | Auto-BLE-shutdown armed — set on *first* reaching the setpoint, then stays set until the heater goes off | CONFIRMED (live) |
+| 10 | `0x0400` | **Setpoint reached** — within a ±2 °C band of the target, and never cleared by lowering the target (§3.1.1) | CONFIRMED (live) |
 | 13 | `0x2000` | Pump/fan FET enabled (`PUMPE_FET_ENABLE`) — the fan switch state | CONFIRMED |
 | 14 | `0x4000` | Error bit C — cause unknown | error STRONG, cause SPECULATIVE |
 | — | `0x4018` | `ERR` — the OR of bits 3, 4 and 14; any of them means "the device reports a fault" | CONFIRMED |
@@ -136,9 +136,13 @@ actuator actually responded, and flags this bit when it did not (STRONG — from
 `FUN_08001fbc` calling the `FUN_08007938`/`FUN_08007930` checks). Bits 3 and 14 are
 deliberately left undecoded rather than guessed; §7 explains how to pin them down.
 
-**Bit 5 vs bits 0/1.** Bit 5 is the heater *switch*: it is set the moment the heater is
-turned on and stays set until it is turned off. Bits 0 and 1 track the heater actually
-running. In practice they move together.
+**Bits 0, 1 and 5 all track the heater switch, not the element.** Bit 5 is `HEIZUNG_ENA`;
+bits 0 and 1 move with it. None of them is a duty-cycle signal: holding at a 180 °C setpoint
+for 3 minutes 40 seconds, PRJSTAT1 did not change once, staying at `0x0623` throughout while
+the element must have been cycling to hold temperature. **There is no "element energised"
+signal anywhere in PRJSTAT1 or PRJSTAT3** (CONFIRMED, live). A client that wants to show
+whether the device is working towards its setpoint has to compare the reported current
+temperature against the target — see §3.1.1.
 
 **The three-state observation** that established bit 10, taken on one device across a full
 heat cycle with a 40 °C setpoint:
@@ -150,9 +154,39 @@ heat cycle with a 40 °C setpoint:
 | bit 9 `0x0200` (auto shutdown) | 0 | 0 | **1** |
 | bits 0, 1, 5 (heater) | 0 | 1 | 1 |
 
-`0x0623 ^ 0x0023 = 0x0600`: exactly bits 9 and 10 flip on reaching temperature. This also
-corrected an earlier assumption — **the auto-shutdown bit arms when the setpoint is
-reached, not when heating starts**, so it is not a usable "heating" signal.
+`0x0623 ^ 0x0023 = 0x0600`: bits 9 and 10 both flip on first reaching temperature. Bit 9 is
+not a "heating" signal, and — unlike bit 10 — it does not flip back afterwards: raising the
+setpoint again clears bit 10 while bit 9 stays set (`0x0223`). Only switching the heater off
+clears it.
+
+#### 3.1.1 The tolerance band on bit 10
+
+Bit 10 is a *proximity* flag with hysteresis, not an activity flag. Measured on one device
+holding at temperature, raising the setpoint in steps and watching the register:
+
+| Setpoint change | Bit 10 cleared? | PRJSTAT1 |
+|---|:--:|---|
+| 180 → 181 (+1) | no | `0x0623` unchanged |
+| 181 → 183 (+2) | no | `0x0623` unchanged |
+| 183 → 186 (+3) | **yes**, for 10.7 s | `0x0623` → `0x0223` → `0x0623` |
+| 186 → 190 (+4) | **yes**, for 10.7 s | `0x0623` → `0x0223` → `0x0623` |
+| 190 → 170 (−20) | no | `0x0623` unchanged for the whole coast down |
+
+So the device treats **±2 °C as "at temperature"**, and only admits to heating on a jump of
+3 °C or more — the same threshold as the vibration alert, which fires on the same condition.
+The flag is also **asymmetric**: lowering the setpoint far below the current reading never
+clears it, because "reached" means the device got there, not that it is there now. In the
++1 and +2 cases the reported temperature visibly climbed to the new setpoint with bit 10
+still set (CONFIRMED, live).
+
+There is one artefact worth expecting: on settling, bit 10 was seen to clear and re-set
+within a single second (`0x0623` → `0x0223` → `0x0623`), which shows up as a one-frame
+flicker in anything driven straight off the bit.
+
+**Switching the heater off clears the whole register at once.** PRJSTAT1 goes to `0x0000`
+the instant the heater is switched off — indistinguishable from a stone-cold device, even
+with the block still at 170 °C and the display lit. **The cooldown phase is not observable**
+(CONFIRMED, live); see §4 for how the integration infers it.
 
 ### 3.2 PRJSTAT2 — `1010000d`
 
@@ -161,17 +195,30 @@ reached, not when heating starts**, so it is not a usable "heating" signal.
 | 0, 1, 3, 4, 5 | `0x003b` | `ERR` — the OR of these bits is a second fault group; the individual bits are unknown | error CONFIRMED, individual bits SPECULATIVE |
 | 9 | `0x0200` | Display in Fahrenheit (**0 means Celsius**) | CONFIRMED |
 | 12 | `0x1000` | Display stays on while cooling (**0 means enabled**) | CONFIRMED |
+| 13 | `0x2000` | Temperature-update strobe — normally set, drops to 0 for about a second around each 1 °C change in the reported temperature | STRONG |
 
 Note the inverted polarity of bits 9 and 12: the clear bit is the enabled state.
+
+Bit 13 is worth knowing about mainly so it is not mistaken for something it is not. It was
+first seen pulsing throughout a cooldown, at a rate that slowed as the device cooled, which
+makes it look like a cooldown or display signal. It is neither: lining the dips up against
+the current-temperature notifications puts every one of them within ±0.6 s of a 1 °C step,
+and the apparent slowdown is just the device losing degrees more slowly as it cooled. It
+pulses whenever the temperature is moving, heating included. Two of roughly fourteen dips in
+the sample did not line up cleanly — notifications are unacknowledged, so a dropped one is
+the likely explanation — which is why this is STRONG rather than CONFIRMED. Anything
+watching PRJSTAT2 for settings changes should ignore this bit.
 
 ### 3.3 PRJSTAT3 — `1010000e`
 
 | Bit | Mask | Meaning | Confidence |
 |---:|---:|---|---|
 | 10 | `0x0400` | Vibration (**0 means enabled**) | CONFIRMED |
-| 12 | `0x1000` | Appears only at the setpoint (`0x0467` → `0x1467`), corroborating PRJSTAT1 bit 10 | SPECULATIVE |
+| 12 | `0x1000` | Mirror of PRJSTAT1 bit 10 — set at the setpoint (`0x0467` → `0x1467`) | CONFIRMED (live) |
 
-PRJSTAT1 bit 10 is preferred over this bit for "ready" because PRJSTAT1 is the register the
+Bit 12 tracked PRJSTAT1 bit 10 exactly across a full cycle, including the ±2 °C tolerance
+band and the drop to `0x0467` when the heater goes off, so the two carry the same
+information. PRJSTAT1 bit 10 is preferred for "ready" because PRJSTAT1 is the register the
 device pushes on change.
 
 ### 3.4 Writing settings bits (PRJSTAT2 / PRJSTAT3)
@@ -224,8 +271,10 @@ Derived values, all computed in the integration rather than read from the device
 |---|---|
 | Total heat time | `10110015 * 60 + 10110016` minutes |
 | Current on time | auto-off setting (`1011000d`) − auto-off countdown (`1011000c`) |
-| Ready | PRJSTAT1 bit 10 |
-| HVAC action | heater off → `off`; heater on and bit 10 set → `idle`; heater on and bit 10 clear → `heating` |
+| Ready | PRJSTAT1 bit 10, verbatim — so it inherits the ±2 °C band and stays on while the device coasts down (§3.1.1) |
+| Heating | current temperature < target temperature. **Not** bit 10: that flag ignores changes of 2 °C or less, and no element signal exists to use instead (§3.1.1) |
+| Cooling | heater off, display-on-while-cooling enabled (PRJSTAT2 bit 12) and current temperature ≥ 40 °C. Inferred — the device reports nothing during cooldown |
+| HVAC action | heater on and heating → `heating`; heater on and holding → *none reported*, so the card names the mode; heater off and cooling → `idle`; otherwise → `off` |
 
 ---
 
@@ -359,7 +408,8 @@ fault sensor is worse than no label: it sends people to fix the wrong thing.
   BLE-module-over-USART1 architecture. Target: STM32F072 (Cortex-M0), flash at
   `0x08000000`, 16 KB SRAM, 60 KB image, 122 functions.
 - **Live observation** on a Volcano Hybrid running V01.03 — the three-state heat cycle in
-  §3.1 and every bit tagged CONFIRMED (live).
+  §3.1, the tolerance-band and cooldown measurements in §3.1.1, and every bit tagged
+  CONFIRMED (live).
 
 Related documentation in this repository: [`README.md`](README.md) for the entities this
 protocol is exposed as, [`CLAUDE.md`](CLAUDE.md) for the architecture of the integration
