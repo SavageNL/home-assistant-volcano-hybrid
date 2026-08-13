@@ -140,6 +140,10 @@ the session counter has, since the heater counter is pinned at full value until 
 first reached. The heater countdown and the second-stage countdown are not exposed in this
 service.
 
+**The pump alone loads it too**, which is the other half of the table above and had not been
+watched before: with the heater off, switching the pump on took `1011000c` from `0` to 3581 s
+against a 3600 s setting (CONFIRMED, live — §9.6).
+
 A `setting − countdown` derivation is therefore valid for this pair.
 
 ---
@@ -155,7 +159,7 @@ A `setting − countdown` derivation is therefore valid for this pair.
 | `10100006` | Mains voltage | ASCII string | Read back as `230VAC` on a European V01.03 device: the mains the unit was built for. Advertises write (§9); **nothing writes it** — it describes the hardware, not a setting. CONFIRMED (live) |
 | `10100007` | Model | ASCII string | Read back as `HYBRID`: the device's own name for its model class — the same Hybrid/Medic distinction PRJSTAT3 bit 0 is seeded from at boot (§3.3), though nothing ties the two together beyond the name. Advertises write (§9); **nothing writes it**. CONFIRMED (live) |
 | `10100008` | Serial number | ASCII string, space-padded | CONFIRMED |
-| `1010000c` | **PRJSTAT1** | `uint16` bit field | Read + **notify** + write. Live device state: heater, pump, ready, faults. Writable at the GATT layer, but the §3.4 convention does not take on it and writing it can switch the pump off — **do not write it** (§3.7). §3.1 |
+| `1010000c` | **PRJSTAT1** | `uint16` bit field | Read + **notify** + write. Live device state: heater, pump, ready, faults. Writable at the GATT layer, but the §3.4 convention does not take on it, writing it can switch the pump off, and a write leaves a shadow that corrupts later reads until mains power is cycled — **do not write it** (§3.7). §3.1 |
 | `1010000d` | **PRJSTAT2** | `uint16` bit field | Read + **notify** + write (see §3.4). Display settings and a second error group. §3.2 |
 | `1010000e` | **PRJSTAT3** | `uint16` bit field | Read + **notify** + write (see §3.4). Vibration setting. §3.3 |
 | `1010000f` | **PRJSTAT4** | `uint16` bit field | The controller's fourth status word (§1). Served as read/write + notify (CONFIRMED, live — §9); identification as PRJSTAT4 STRONG. No bit decoded; read once, not subscribed, and its absence is tolerated |
@@ -497,13 +501,68 @@ What the runs establish:
   the next pass. That re-asserts the heater's bits (run 3) but not the pump's, because the pump
   FET follows bit 13 directly, so the forced clear of bits 12 and 13 is taken as a genuine
   pump-off (runs 1 and 2). SPECULATIVE — it fits the data and has not been checked against the
-  firmware.
+  firmware. §3.7.1 revises the read-back half of it: after a write, a read of `1010000c` can
+  return the module's own copy of the written word merged with live status, so run 3's `0x8000`
+  need not mean the controller's register ever held it. The pump stopping is untouched by that —
+  it was the device's own reported state, not a read-back.
 
 For a client the conclusion is flat: **the §3.4 set/clear convention does not work on PRJSTAT1,
 and writing to PRJSTAT1 can switch the pump off.** Do not write it. CONFIRMED.
 
 The three bits the firmware's whitelist marks host-settable on PRJSTAT1 are 7, 8 and 15 (§9);
-only bit 15 was tried. Whatever path does reach them, it is not this one.
+these three runs tried only bit 15, and read the outcome from a value that is also what a write
+echo would look like. §3.7.1 tried bit 7 instead, under conditions that remove both weaknesses.
+
+#### 3.7.1 The bit-7 test — the same result, without the ambiguity
+
+Run 3 above rests partly on an inference about timing and echoes: `0x8000` read back is exactly
+the word that was written, so the read cannot distinguish the register briefly holding that value
+from the module handing back what it was given. A second experiment was designed to remove that
+reading, and it replaces §3.7's inference with an observation.
+
+**Bit 7** was chosen because its branch in the controller has no side effect at the write site —
+it selects PID or on/off control, which the loop acts on a pass later (§3.1.2) — so setting it
+could not stop an actuator the way runs 1 and 2 did. The device was then put in a state where the
+bit-7 variant of the live value is *also* a value the controller can produce: the heater was
+switched on with the target at 40 °C while the block was already at ~86 °C, so the PID output sat
+at zero and nothing actually heated, but PRJSTAT1 read a non-zero `0x0623` (heater on, target
+reached). `0x0623` and `0x06a3` differ only in bit 7 and both are legal controller values, unlike
+`0x0000` or `0x8000`, which are exactly what an echo would produce. Each register read was taken
+**4 s** after its write, far past the ~0.3 s in which run 3 reverted.
+
+| Step | Written to `1010000c` | PRJSTAT1 read back 4 s later |
+|---|---|---|
+| baseline | — | `0x0623` |
+| set bit 7 | `0x00000080` | `0x0623` — **bit 7 not set** |
+| clear bit 7 | `0x00010080` | `0x10681` — see below |
+
+**Bit 7 did not set.** CONFIRMED (live). No part of that depends on when the read was taken or on
+telling a real register value from an echo.
+
+So §3.7's conclusion is observed rather than inferred: a §3.4 write to `1010000c` does not change
+the register, whichever bit it names. The reading that fits is that the module does not supply the
+set/clear digit — frame offset 7 of the telegram (§10.1) — when it forwards a write to this
+characteristic, so what reaches the controller is never a well-formed `S W 'P'` set (§10.4).
+Something does reach it, or runs 1 and 2 would not have stopped the pump; it just is not the
+telegram that would set a bit. SPECULATIVE on both halves: it fits the two experiments, and
+checking it needs the module's firmware.
+
+What follows for a client does not depend on the mechanism being right: **no PRJSTAT1 bit is
+settable over BLE on this module firmware, including bit 15, the air step mode.** Two of the three
+whitelisted bits have now been tried, at opposite ends of the register and under different
+conditions, and neither latched; bit 8 is untried and there is no reason left to expect it to
+behave differently.
+
+**The third read shows the module keeping a copy of what it was written.** `0x10681` is the
+written word `0x00010080` OR'd with a controller value of `0x0601`. Bit 16 cannot be produced by a
+16-bit status word at all, so this is not the register: the module holds a shadow of the last
+written word and merges it into what a read returns. The same merge has been seen once before as
+`0x13080`. It is durable — the shadow **survived a full Home Assistant restart and a BLE
+reconnect**, and on this device was only observed to clear after a mains power cycle (CONFIRMED,
+live). Nothing establishes what does clear it short of that; a reconnect does not. A client that
+has written `1010000c` is therefore reading a mixture of its own write and live status from then
+on, which is a second reason not to write the register: it corrupts the register's readings for
+the rest of the mains-power session.
 
 ---
 
@@ -656,21 +715,21 @@ What is still undecoded, in the order it is worth attacking:
 6. **PRJSTAT4 and PRJSTAT5** (`1010000f` / `10100010`) — what the controller's other two status
    words carry. That the module serves them is now settled (§9), so the *Status register 4/5*
    diagnostic sensors do report a value; watching them across a heat cycle is the next step.
-7. **How to latch PRJSTAT1 bit 15**, and the other two bits its whitelist marks host-settable.
-   The controller plainly supports the telegram, but the §3.4 mask write does not take (§3.7).
-   Whatever the vendor app does to reach these bits, it is something else.
-8. **What service `10130000` is.** Eleven read-only characteristics plus one read/write/notify
-   at `101300ff`, none of them decoded and none mentioned by the vendor app (§9). Reading them
-   on a device and watching whether any move is where this starts.
-9. **Which characteristic, if any, is bound to the `G Q` pump-percent telegram.** The telegram
-   itself is settled: `G Q <pct>` writes config `+0x40`, ungated, 0–100 (§10.5). What is not
-   settled is whether the BLE module binds any characteristic to it. That binding lives in the
-   **radio module's firmware, which is not in the controller image** (§10.6), so this question is
-   not answerable by more work on the controller dump — it needs the module's firmware, or a
-   device to test against. `10110004` is the best positional candidate and its read value argues
-   against it (§10.6); a wrong guess here writes to the pump (§9.2).
+7. **What service `10130000` is.** Eleven read-only characteristics plus one read/write/notify
+   at `101300ff`, none of them decoded and none mentioned by the vendor app (§9). Two of them have
+   now been read across a state change and both moved (§9.6), so the values are live; nothing is
+   attributed yet, because the block was cooling at the time.
+8. **The radio module's firmware**, which is now what stands between this document and two
+   questions it used to list separately. *How to latch a PRJSTAT1 bit* and *which characteristic
+   carries pump power* are both closed by observation rather than left unproven: no PRJSTAT1 bit
+   set over BLE, tested at two ends of the register (§3.7.1), and no characteristic exposing a
+   pump percent in any pump state (§10.6). Both failures are in the module, not the controller —
+   the set/clear digit it does not forward, and the characteristic→telegram bindings it holds.
+   Neither is in the controller image, and the module's own bridge tells a subscriber nothing
+   (§9.4.1). Reopening either question needs the module's firmware; no further work on the
+   controller dump touches them.
 
-Items 1, 3, 4 and 6–9 are settled by observation rather than more decompiling. Enable the *Status
+Items 1, 3, 4, 6 and 7 are settled by observation rather than more decompiling. Enable the *Status
 register 1/2/3*, *Error history 1/2* and *Last fault* diagnostic sensors, then when a real fault
 occurs — the device shows an error, or the *Prv1 error* / *Prv2 error* sensors turn on — record:
 
@@ -709,7 +768,10 @@ label on a fault sensor is worse than no label, because it sends people to fix t
   it, so no further work on the controller image settles them (§10.6).
 - **Live observation** on a Volcano Hybrid running V01.03 — the three-state heat cycle in
   §3.1, the tolerance-band and cooldown measurements in §3.1.1, and every bit tagged
-  CONFIRMED (live).
+  CONFIRMED (live). Also the three recorded negative results: the PRJSTAT1 write attempts
+  (§3.7, §3.7.1), the silent module bridge (§9.4.1) and the pump differential dump (§9.6,
+  §10.6). Negative results are recorded here at the same standard as positive ones, because
+  the alternative is somebody spending a weekend re-running them.
 
 Related documentation in this repository: [`README.md`](README.md) for the entities this
 protocol is exposed as, [`CLAUDE.md`](CLAUDE.md) for the architecture of the integration
@@ -765,7 +827,7 @@ is what sits behind the ones whose binding nobody has established.
 | `10110001` | 71 | read, notify | Current temperature (§2) |
 | `10110002` | 74 | read | undecoded |
 | `10110003` | 76 | read, write, notify | Target temperature (§2) |
-| `10110004` | 79 | read, write, notify | undecoded — pump-power candidate, see below |
+| `10110004` | 79 | read, write, notify | undecoded — was the pump-power candidate, see below |
 | `10110005` | 82 | read, write | LED brightness (§2) |
 | `1011000c` | 84 | read, notify | Auto-off countdown, session timer (§2) |
 | `1011000d` | 87 | read, write | Auto-off setting (§2) |
@@ -783,18 +845,19 @@ is what sits behind the ones whose binding nobody has established.
 `10110006`–`1011000b` are not served at all: the numbering jumps straight from `10110005` to
 `1011000c`.
 
-**`10110004` is a candidate for the pump-power command** (SPECULATIVE). The firmware has a
-`G Q <pct>` telegram that sets pump power to 0–100 % with no gating of any kind, and this is an
-undecoded read/write/notify characteristic sitting immediately after the target temperature —
+**`10110004` was the candidate for the pump-power command**, on position and shape alone: an
+undecoded read/write/notify characteristic sitting immediately after the target temperature, where
+the firmware has a `G Q <pct>` telegram setting pump power to 0–100 % with no gating of any kind,
 and a `uint16` percentage is already how LED brightness is carried two characteristics along.
-Nothing has tested it. It is a guess from position and shape only, and the cost of a wrong guess
-is a write to something that drives the pump.
 
-Two later findings argue against it without settling it (§10.6): the module's characteristic map
-is not an order-preserving projection of the controller's command set, so position carries less
-than it looks like it does; and `10110004` read `0` both idle and with the pump at full speed,
-where anything mirroring `cfg+0x40` should read its factory default of 100. The candidacy stays
-SPECULATIVE and is not to be acted on.
+**That candidacy is closed.** The module's characteristic map is not an order-preserving
+projection of the controller's command set, so position carries less than it looks like it does
+(STRONG — §10.6); and the differential dump in §10.6 read `10110004` as `0` idle, `0` with the
+pump running at full speed and `0` afterwards, where anything mirroring `cfg+0x40` would read its
+factory default of 100. No characteristic in the dump reads a pump percent in any state
+(CONFIRMED, live — §10.6), so there is nothing left for this one to be. It goes back to plain
+undecoded, and it must not be written: whatever it is bound to, a wrong guess writes into the
+service that drives the pump (§10.7).
 
 ### 9.3 Service `10130000` — undocumented
 
@@ -807,20 +870,25 @@ otherwise describes:
 | `101300ff` | 136 | read, write, notify |
 
 Eleven consecutive read-only characteristics and one read/write/notify at the top of the range.
-No content has been read back and nothing is claimed about what the service is for. The shape
-(a block of read-only values plus one control characteristic) is suggestive of a second
-register bank, but that is not evidence — §7 item 8.
+Nothing is claimed about what the service is for. The shape (a block of read-only values plus one
+control characteristic) is suggestive of a second register bank, but that is not evidence — §7
+item 7.
+
+Two of them have now been read across a state change and both moved: `10130001` 13152 → 13165 and
+`10130005` 37 → 42 with the pump switched on (CONFIRMED, live — §9.6). That says the service
+carries something live, and nothing else; the block was cooling throughout, so the pump is not
+established as the cause.
 
 ### 9.4 Services belonging to the BLE module
 
 Also enumerated, and belonging to the module rather than the controller:
 
-| Service | Characteristic | Properties |
-|---|---|---|
-| `00001801` | — | standard GATT service |
-| `00000001-1989-0108-1234-123456789abc` | `00000003` | read, notify |
-| | `00000002` | write-without-response, write |
-| `01000002-1989-0108-1234-123456789abc` | `01000001` | write, notify |
+| Service | Characteristic | Handle | Properties |
+|---|---|---:|---|
+| `00001801` | — | — | standard GATT service |
+| `00000001-1989-0108-1234-123456789abc` | `00000003` | 11 | read, notify |
+| | `00000002` | 14 | write-without-response, write |
+| `01000002-1989-0108-1234-123456789abc` | `01000001` | 17 | write, notify |
 
 Note a naming mismatch worth knowing about before anyone follows §6: the vendor app names
 `00000002-1989-0108-1234-123456789abc` as the firmware-update **service**, but on this device
@@ -828,6 +896,35 @@ that UUID enumerates as a **characteristic** of service `00000001-1989-0108-1234
 alongside a read/notify characteristic `00000003` — which is the write/notify pair a UART-style
 telegram link needs. Whether §6's naming is shorthand or a mistake is not settled here; nothing
 about the telegram protocol itself changes.
+
+**Nothing may be written into this UUID family.** The writable characteristic on the bridge is at
+**handle 14**, and it is precisely the UUID the vendor app calls the firmware-update service. A
+client that addresses this family **by UUID rather than by handle** cannot know which of the two
+readings it is acting on, and one of them is the path into DFU — the failure mode §6 spends its
+length arguing is the worst this integration could cause. Read it by handle, subscribe by handle,
+and write nothing here without the module's firmware in hand.
+
+#### 9.4.1 The bridge does not forward telegram traffic — a recorded negative result
+
+The module's own services are the obvious way to reach the controller's telegrams (§10) directly:
+if the bridge echoed the USART3 traffic to a subscriber, the characteristic→telegram map and the
+frame format would both become observable instead of read off an image, and §10.6's dead end would
+reopen.
+
+Both of the module's read/notify characteristics were subscribed **by handle**, for the reason
+above — handle 11 (`00000003-1989-…`, in service `00000001-1989-…`) and handle 17
+(`01000001-1989-…`, in service `01000002-1989-…`). Both subscriptions were accepted. They then
+stayed subscribed across a full three-pass characteristic dump (§10.6), a pump on and off, a
+heater on and off, and two writes to `1010000c` (§3.7.1) — the device changing state in every way
+this document knows how to make it.
+
+**Not a single notification arrived on either handle.** CONFIRMED (live). That the subscriptions
+were still live throughout, rather than quietly dropped at some point, is what a later re-subscribe
+attempt shows: it failed with "Notifications are already enabled".
+
+So the bridge does not surface controller telegram traffic to a BLE client. The telegram framing
+(§10.1) and the characteristic map (§10.6) cannot be recovered by observation from this side, and
+this avenue is closed.
 
 ### 9.5 The write properties match the firmware's writable-bit whitelist
 
@@ -851,6 +948,28 @@ a write to any of them takes effect: PRJSTAT1 is on this list and §3.7 is what 
 The telegram column is the `S`-group selector (§10.4). PRJSTAT5's `K` comes from the dispatcher
 rather than from the whitelist, which is why it was blank here before.
 
+### 9.6 What moved when the pump ran
+
+From the differential dump in §10.6 — every readable characteristic read with the device idle,
+then with the pump running, then after switching it off again. What that experiment was looking
+for is in §10.6; this is what else changed, recorded as observations. CONFIRMED (live).
+
+| Characteristic | Idle | Pump running | Reading |
+|---|---:|---:|---|
+| `1010000d` (PRJSTAT2) | `0x0000` | `0x2000` | Bit 13, displayed temperature settled (§3.2) |
+| `1011000c` | 0 | 3581 | Session countdown, setting 3600 (§2) |
+| `10130001` | 13152 | 13165 | undecoded |
+| `10130005` | 37 | 42 | undecoded |
+| `10110017` | 316 | 361 | undecoded |
+
+`1011000c` is the one that establishes something: the countdown started with the heater off and
+the pump alone running, which independently confirms §2's claim that either actuator loads the
+session timer — a claim that until now rested on the firmware plus a heater-only observation.
+
+**The last three cannot be attributed to the pump.** The block was cooling from 86 °C to 56 °C
+across the three passes, so temperature and elapsed time move together with the pump state and
+nothing here separates them. They changed; that is the whole claim.
+
 ---
 
 ## 10. Appendix — the controller's telegram command set
@@ -863,8 +982,10 @@ things are reachable over Bluetooth and others are not, and it is the reference 
 never be written — **§10.7 is the safety-critical part of this appendix.**
 
 The tags here follow the table at the head of this document without exception. **Nothing in this
-appendix has been observed on a device**, so nothing in it is CONFIRMED: read straight off the
-disassembled instruction stream at the address given is exactly what STRONG means here, however
+appendix has been observed on a device** — the one exception is §10.6, which is a live measurement
+of what the GATT does *not* expose and is tagged accordingly — so nothing else in it is CONFIRMED:
+read straight off the disassembled instruction stream at the address given is exactly what STRONG
+means here, however
 little room for doubt an unambiguous opcode leaves. Addresses are cited throughout so each claim
 can be re-checked, and reasoning *over* the image rather than reading it is marked SPECULATIVE.
 
@@ -983,13 +1104,15 @@ besides.
 Both are valid entries in the **BLE** dispatch table, so both are reachable over Bluetooth *if*
 the module binds a characteristic to them.
 
-### 10.6 Why the pump-percent route is nevertheless blocked
+### 10.6 Why the pump-percent route is closed
 
-A negative result, recorded so the next person does not spend the same time on it.
+A negative result, recorded so the next person does not spend the same time on it. It began as an
+argument from the image and one idle dump; the differential dump below closes it by measurement.
 
 - **The characteristic→telegram binding lives in the radio module's firmware, which is not in
   this image.** Nothing in the controller image assigns a GATT handle to any command. The binding
   can be reasoned about; it cannot be derived from this dump. CONFIRMED (image, as an absence).
+  Nor can it be watched: the module's own bridge sends a subscriber nothing (§9.4.1).
 - The tempting inference — that the module's characteristic map is an order-preserving projection
   of the command set, given that `1010000c…10` are PRJSTAT1…5 with write properties matching the
   whitelists five for five (§9.5) — **does not hold as a general rule.** Those five are one
@@ -998,13 +1121,25 @@ A negative result, recorded so the next person does not spend the same time on i
   `10110000` bindings, five different groups appear interleaved by function, and `03`
   (`cfg+0x44`) precedes `05` (`cfg+0x42`), so it is not offset-ordered either. The map is
   hand-curated. STRONG.
-- Evidence that pump power may not be exposed at all: `cfg+0x40` defaults to 100, **no
-  characteristic in the observed dump reads 100**, and `10110004` read `0` both idle and with the
-  pump running at full speed. A characteristic mirroring `cfg+0x40` should read 100 on a
-  factory-default unit. STRONG.
-- `10110004` remains the best positional candidate if one exists at all — a writable notify scalar
-  sitting between `03` (`cfg+0x44`) and `05` (`cfg+0x42`), exactly where `cfg+0x40` would belong —
-  but its read value contradicts that. SPECULATIVE, and explicitly not to be acted on.
+- **Pump power is not reachable through the application services.** CONFIRMED (live). A
+  differential dump settles it: every readable characteristic was read with the device idle, the
+  pump was switched on with `10110013`, everything was re-read, the pump was switched off and
+  everything was re-read again — reads only, apart from the two pump commands the integration
+  already issues in normal use. The test is a search for the value 100: the `G` group's `P`
+  sub-index reads the live commanded pump percent and its `Q` sub-index the configured one
+  (`cfg+0x40`, factory default 100 — §10.5; STRONG — image), so a characteristic bound to `G P`
+  would swing 0 → 100 → 0 across the three passes and one bound to `G Q` would sit at 95–100 in
+  all three. **No characteristic read 100 in any pass.** `10110004`, the best positional candidate,
+  read `0` idle, `0` with the pump running at full speed, and `0` afterwards. What else moved
+  during the dump is in §9.6.
+- That is a statement about **exposure only**. `G Q` and `G R` are what §10.5 says they are and the
+  controller still accepts them; what the dump establishes is that no characteristic this device
+  serves carries either value, in any pump state. Nothing about the firmware itself is revised by
+  it, and a different module firmware could bind one.
+- `10110004` was the best positional candidate — a writable notify scalar sitting between `03`
+  (`cfg+0x44`) and `05` (`cfg+0x42`), exactly where `cfg+0x40` would belong. With no
+  characteristic exposing a pump percent at all, there is nothing for it to be a candidate for;
+  the guess is withdrawn (§9.2) and it stays undecoded and unwritten.
 
 ### 10.7 Commands that must never be written blind
 
@@ -1031,3 +1166,8 @@ calibration, flash, DFU or reset. Nothing in normal operation needs any of them.
 Two of these are already reachable over the GATT this document describes — `10100011` is the
 `C` + 4711 bootloader unlock (§6), and §3.7 is what a single well-meant write to an advertised
 writable status register actually did.
+
+One more writable target sits outside this table and deserves the same treatment: the module's own
+bridge exposes a writable characteristic at **handle 14**, in the UUID family the vendor app names
+as the firmware-update service (§9.4). Addressing that family by UUID rather than by handle risks
+addressing DFU. Write nothing there.
