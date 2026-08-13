@@ -48,7 +48,9 @@ The three PRJSTAT characteristics are the controller's own 16-bit status words a
 offsets `+0x14`, `+0x16` and `+0x18`, forwarded verbatim — the module does not remap or
 renumber the bits. (STRONG — every bit whose meaning was established live is written at the
 matching offset in the firmware.) The controller keeps **five** such words; `1010000f` and
-`10100010` expose the other two, which this integration does not read.
+`10100010` expose the other two. This integration reads both as raw diagnostics (*Status
+register 4* / *5*) without subscribing and without requiring them to exist — no bit in
+either is decoded, and no device has yet been observed serving them at all.
 
 The main controller is an **STM32L4 (Cortex-M4)**, specifically the L4x2/L4x3 line: the image
 uses Thumb-2 instructions (`strd`, `tbb`, `cbz`, register-shifted loads), carries a
@@ -151,6 +153,8 @@ A `setting − countdown` derivation is therefore valid for this pair.
 | `1010000c` | **PRJSTAT1** | `uint16` bit field | Read + **notify**. Live device state: heater, pump, ready, faults. §3.1 |
 | `1010000d` | **PRJSTAT2** | `uint16` bit field | Read + **notify** + write (see §3.4). Display settings and a second error group. §3.2 |
 | `1010000e` | **PRJSTAT3** | `uint16` bit field | Read + **notify** + write (see §3.4). Vibration setting. §3.3 |
+| `1010000f` | **PRJSTAT4** | `uint16` bit field | The controller's fourth status word (§1). No bit decoded; read once, not subscribed, and its absence is tolerated. SPECULATIVE |
+| `10100010` | **PRJSTAT5** | `uint16` bit field | The fifth status word, on the same terms. SPECULATIVE |
 | `10100011` | Code number | `uint16` write | Writing `4711` unlocks entry into the bootloader. Not touched by this integration. CONFIRMED (vendor app) |
 | `10100015` | **HIST1** | ASCII hex text | Fault log — recent fault codes and/or per-code counts. §3.5 |
 | `10100016` | **HIST2** | ASCII hex text | The other half of the fault log. §3.5 |
@@ -429,7 +433,7 @@ characteristics that push:
 
 | Subscribed (notify) | Read once per connection | Re-read on every 10 s cycle |
 |---|---|---|
-| current temperature, target temperature, PRJSTAT1, PRJSTAT2, PRJSTAT3, auto-off countdown, lifetime hours, lifetime minutes | serial number, all four version strings, auto-off setting, LED brightness, HIST1, HIST2 | current temperature, target temperature, PRJSTAT1 |
+| current temperature, target temperature, PRJSTAT1, PRJSTAT2, PRJSTAT3, auto-off countdown, lifetime hours, lifetime minutes | serial number, all four version strings, auto-off setting, LED brightness, HIST1, HIST2, PRJSTAT4, PRJSTAT5 | current temperature, target temperature, PRJSTAT1 |
 
 The 10 s cycle is a fallback, not the update mechanism. Notifications are unacknowledged
 and the device only notifies on *change*, so a single dropped packet while the device holds
@@ -559,8 +563,12 @@ What is still undecoded, in the order it is worth attacking:
 5. **`10100003`**, which is a second copy of the application version string rather than a
    distinct identity — but which telegram backs it is decided in the BLE module, not the
    controller.
+6. **PRJSTAT4 and PRJSTAT5** (`1010000f` / `10100010`) — whether the BLE module serves them at
+   all, and what the controller's other two status words carry. Enable the *Status register
+   4/5* diagnostic sensors: anything other than *unknown* settles the first half of that, and
+   watching them across a heat cycle starts on the second.
 
-Items 1, 3 and 4 are settled by observation rather than more decompiling. Enable the *Status
+Items 1, 3, 4 and 6 are settled by observation rather than more decompiling. Enable the *Status
 register 1/2/3* and *Error history 1/2* diagnostic sensors, then when a real fault occurs —
 the device shows an error, or the *Prv1 error* / *Prv2 error* sensors turn on — record:
 

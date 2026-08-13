@@ -63,6 +63,15 @@
       "auto_shutdown": {
         "name": "Auto shutdown enabled"
       },
+      "service_mode": {
+        "name": "Service mode"
+      },
+      "air_step_mode": {
+        "name": "Air step mode"
+      },
+      "second_stage": {
+        "name": "Second temperature stage"
+      },
       "prv1_error": {
         "name": "Prv1 error"
       },
@@ -113,6 +122,12 @@
       },
       "prj3": {
         "name": "Status register 3"
+      },
+      "prj4": {
+        "name": "Status register 4"
+      },
+      "prj5": {
+        "name": "Status register 5"
       },
       "hist1": {
         "name": "Error history 1"

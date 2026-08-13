@@ -6,6 +6,12 @@
       },
       "auto_shutdown": {
         "default": "mdi:power"
+      },
+      "air_step_mode": {
+        "default": "mdi:fan-auto"
+      },
+      "second_stage": {
+        "default": "mdi:thermometer-plus"
       }
     },
     "button": {
@@ -41,6 +47,12 @@
         "default": "mdi:chip"
       },
       "prj3": {
+        "default": "mdi:chip"
+      },
+      "prj4": {
+        "default": "mdi:chip"
+      },
+      "prj5": {
         "default": "mdi:chip"
       },
       "hist1": {

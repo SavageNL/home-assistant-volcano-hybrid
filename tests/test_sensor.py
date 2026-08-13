@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 
 from . import FakeVolcanoBLE, get_entity_id
 
@@ -63,6 +63,8 @@ async def test_raw_register_sensors(
     data.prj1 = 0x0623
     data.prj2 = 0x0000
     data.prj3 = 0x1467
+    data.prj4 = 0x1234
+    data.prj5 = 0x5678
     data.hist1 = "0011223344556677"
     data.hist2 = "8899aabbccddeeff"
     mock_volcano.data_updated()
@@ -74,12 +76,37 @@ async def test_raw_register_sensors(
         ("prj1", "0x0623"),
         ("prj2", "0x0000"),
         ("prj3", "0x1467"),
+        ("prj4", "0x1234"),
+        ("prj5", "0x5678"),
         ("hist1", "0011223344556677"),
         ("hist2", "8899aabbccddeeff"),
     ):
         state = hass.states.get(get_entity_id(hass, "sensor", key))
         assert state is not None, key
         assert state.state == expected, key
+
+
+async def test_extra_register_sensors_without_the_characteristics(
+    hass: HomeAssistant,
+    entity_registry_enabled_by_default: None,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """A device that never serves registers 4/5 reports them as unknown."""
+    mock_volcano.connected = True
+    mock_volcano.data.prj1 = 0x0623
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    for key in ("prj4", "prj5"):
+        state = hass.states.get(get_entity_id(hass, "sensor", key))
+        assert state is not None, key
+        assert state.state == STATE_UNKNOWN, key
+
+    # The registers the device does serve are unaffected by the missing ones.
+    prj1 = hass.states.get(get_entity_id(hass, "sensor", "prj1"))
+    assert prj1 is not None
+    assert prj1.state == "0x0623"
 
 
 async def test_sensor_availability(

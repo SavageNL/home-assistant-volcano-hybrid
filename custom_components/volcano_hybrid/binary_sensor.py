@@ -50,6 +50,29 @@ SENSOR_DESCRIPTIONS: dict[str, BinarySensorEntityDescription] = {
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
+    # The service/burn-in mode drives the device to 230 °C for ten minutes on
+    # its own, so it is a problem to be told about rather than a mode to show.
+    VolcanoSensor.SERVICE_MODE: BinarySensorEntityDescription(
+        key=VolcanoSensor.SERVICE_MODE,
+        translation_key=VolcanoSensor.SERVICE_MODE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        entity_registry_enabled_default=False,
+    ),
+    # Two settings the device holds in PRJSTAT1. They are plain state flags,
+    # not conditions: no device class fits either, and neither is written here.
+    VolcanoSensor.AIR_STEP_MODE: BinarySensorEntityDescription(
+        key=VolcanoSensor.AIR_STEP_MODE,
+        translation_key=VolcanoSensor.AIR_STEP_MODE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
+    VolcanoSensor.SECOND_STAGE: BinarySensorEntityDescription(
+        key=VolcanoSensor.SECOND_STAGE,
+        translation_key=VolcanoSensor.SECOND_STAGE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
     VolcanoSensor.PRV1_ERROR: BinarySensorEntityDescription(
         key=VolcanoSensor.PRV1_ERROR,
         translation_key=VolcanoSensor.PRV1_ERROR,
@@ -88,6 +111,9 @@ async def async_setup_entry(
             VolcanoBinarySensorEntity(coordinator, VolcanoSensor.PUMP_ACTIVE),
             VolcanoBinarySensorEntity(coordinator, VolcanoSensor.ACTUATOR_FAULT),
             VolcanoBinarySensorEntity(coordinator, VolcanoSensor.AUTO_SHUTDOWN),
+            VolcanoBinarySensorEntity(coordinator, VolcanoSensor.SERVICE_MODE),
+            VolcanoBinarySensorEntity(coordinator, VolcanoSensor.AIR_STEP_MODE),
+            VolcanoBinarySensorEntity(coordinator, VolcanoSensor.SECOND_STAGE),
             VolcanoBinarySensorEntity(coordinator, VolcanoSensor.PRV1_ERROR),
             VolcanoBinarySensorEntity(coordinator, VolcanoSensor.PRV2_ERROR),
             VolcanoBinarySensorEntity(

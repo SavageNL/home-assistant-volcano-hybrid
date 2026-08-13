@@ -27,14 +27,19 @@ from custom_components.volcano_hybrid.volcano_ble.volcano_ble import (
     CHARACTERISTIC_PRJ1V,
     CHARACTERISTIC_PRJ2V,
     CHARACTERISTIC_PRJ3V,
+    CHARACTERISTIC_PRJ4V,
+    CHARACTERISTIC_PRJ5V,
     CHARACTERISTIC_SERIAL_NUMBER,
     CHARACTERISTIC_SET_TEMP,
     CHARACTERISTIC_SHUT_OFF,
     MASK_PRJSTAT1_VOLCANO_ACTUATOR_FAULT,
+    MASK_PRJSTAT1_VOLCANO_AIR_STEP_MODE,
     MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA,
     MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE,
+    MASK_PRJSTAT1_VOLCANO_SECOND_STAGE,
     MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING,
     MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA,
+    MASK_PRJSTAT2_VOLCANO_SERVICE_MODE,
     MASK_PRJSTAT3_VOLCANO_VIBRATION,
     VolcanoBLE,
 )
@@ -92,30 +97,40 @@ class FakeCharacteristic:
 class FakeService:
     """A GATT service handing out characteristics."""
 
-    def get_characteristic(self, uuid: str) -> FakeCharacteristic:
-        """Get a characteristic by uuid."""
-        return FakeCharacteristic(uuid)
+    def __init__(self, missing: set[str]) -> None:
+        """Initialize the service."""
+        self.missing = missing
+
+    def get_characteristic(self, uuid: str) -> FakeCharacteristic | None:
+        """Get a characteristic by uuid, returning None when the device lacks it."""
+        return None if uuid in self.missing else FakeCharacteristic(uuid)
 
 
 class FakeServices:
     """A GATT service collection."""
 
+    def __init__(self, missing: set[str]) -> None:
+        """Initialize the collection."""
+        self.missing = missing
+
     def get_service(self, uuid: str) -> FakeService:
         """Get a service by uuid."""
-        return FakeService()
+        return FakeService(self.missing)
 
 
 class FakeBleakClient:
     """A BleakClient that serves canned characteristic values."""
 
-    def __init__(self, values: dict[str, bytes]) -> None:
-        """Initialize the client."""
+    def __init__(
+        self, values: dict[str, bytes], missing: set[str] | None = None
+    ) -> None:
+        """Initialize the client, optionally without some characteristics."""
         self.values = values
         self.written: list[tuple[str, bytes]] = []
         self.notify_callbacks: dict[str, Callable[..., Any]] = {}
         self.is_connected = True
         self.address = VOLCANO_ADDRESS
-        self.services = FakeServices()
+        self.services = FakeServices(missing or set())
 
     async def read_gatt_char(self, char: FakeCharacteristic) -> bytearray:
         """Read a characteristic."""
@@ -145,6 +160,8 @@ def default_values() -> dict[str, bytes]:
         CHARACTERISTIC_PRJ1V: prj1v.to_bytes(2, "little"),
         CHARACTERISTIC_PRJ2V: (0).to_bytes(2, "little"),
         CHARACTERISTIC_PRJ3V: (0).to_bytes(2, "little"),
+        CHARACTERISTIC_PRJ4V: (0x1234).to_bytes(2, "little"),
+        CHARACTERISTIC_PRJ5V: (0x5678).to_bytes(2, "little"),
         CHARACTERISTIC_SERIAL_NUMBER: b"VH123456 ",
         CHARACTERISTIC_FIRMWARE_VERSION: b"V01.23",
         CHARACTERISTIC_FIRMWARE_BLE_VERSION: b"V01.00",
@@ -224,12 +241,54 @@ async def test_connect_reads_raw_registers_and_history() -> None:
     )
     assert data.prj2 == 0
     assert data.prj3 == 0
+    assert data.prj4 == 0x1234
+    assert data.prj5 == 0x5678
     assert data.hist1 == "0011223344556677"
     assert data.hist2 == "8899aabbccddeeff"
 
     # History is read once; it is not a push characteristic
     assert CHARACTERISTIC_HIST1 not in client.notify_callbacks
     assert CHARACTERISTIC_HIST2 not in client.notify_callbacks
+
+    # Whether the other two status words notify is unknown, so they are not
+    # subscribed to either.
+    assert CHARACTERISTIC_PRJ4V not in client.notify_callbacks
+    assert CHARACTERISTIC_PRJ5V not in client.notify_callbacks
+
+
+async def test_connect_without_the_extra_status_registers() -> None:
+    """
+    A device that does not serve the extra status registers still connects.
+
+    Those two characteristics are unverified: no device has been observed
+    serving them. They are read inside the same asyncio.gather as everything
+    else, so a missing one must not take the connect down with it — the whole
+    device would be left unusable over two diagnostic values nothing decodes.
+    """
+    values = default_values()
+    del values[CHARACTERISTIC_PRJ4V]
+    del values[CHARACTERISTIC_PRJ5V]
+    client = FakeBleakClient(
+        values, missing={CHARACTERISTIC_PRJ4V, CHARACTERISTIC_PRJ5V}
+    )
+    volcano, _, device_updates = await connect(client)
+
+    assert volcano.is_connected
+    data = volcano.data
+    assert data.prj4 is None
+    assert data.prj5 is None
+
+    # Everything else came up: the values read before the missing ones in the
+    # gather, the ones read after them, and the device-level callback.
+    assert data.current_temp == 185
+    assert data.set_temp == 190
+    assert data.prj1 is not None
+    assert data.serial_number == "VH123456"
+    assert data.led_brightness == 70
+    assert data.hist2 == "8899aabbccddeeff"
+    assert device_updates
+    assert CHARACTERISTIC_CURRENT_TEMP in client.notify_callbacks
+    assert CHARACTERISTIC_PRJ1V in client.notify_callbacks
 
 
 async def test_prj1_notification_updates_raw_register() -> None:
@@ -284,6 +343,40 @@ async def test_prj1_decodes_temperature_reached_and_actuator_fault() -> None:
 
     assert volcano.data.actuator_fault is True
     assert volcano.data.prv1_error is True
+
+
+async def test_status_registers_decode_the_read_only_modes() -> None:
+    """The service, air-step and second-stage bits are decoded, not written."""
+    values = default_values()
+    prj1v = (
+        MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA
+        | MASK_PRJSTAT1_VOLCANO_SECOND_STAGE
+        | MASK_PRJSTAT1_VOLCANO_AIR_STEP_MODE
+    )
+    values[CHARACTERISTIC_PRJ1V] = prj1v.to_bytes(2, "little")
+    values[CHARACTERISTIC_PRJ2V] = MASK_PRJSTAT2_VOLCANO_SERVICE_MODE.to_bytes(
+        2, "little"
+    )
+    client = FakeBleakClient(values)
+    volcano, _, _ = await connect(client)
+
+    data = volcano.data
+    assert data.second_stage is True
+    assert data.air_step_mode is True
+    assert data.service_mode is True
+    # None of them is an error condition on its own.
+    assert data.prv1_error is False
+    assert data.prv2_error is False
+
+    # And they follow the device back down again.
+    callback = client.notify_callbacks[CHARACTERISTIC_PRJ1V]
+    await callback(
+        FakeCharacteristic(CHARACTERISTIC_PRJ1V),
+        bytearray(MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA.to_bytes(2, "little")),
+    )
+
+    assert data.second_stage is False
+    assert data.air_step_mode is False
 
 
 async def test_notifications_update_data() -> None:

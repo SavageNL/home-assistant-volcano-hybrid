@@ -29,12 +29,20 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
   while it cools down with its display still lit after being switched off.
 - Diagnostic entities for the decoded device status, all disabled by default:
   **Heater running**, **Pump running** and a **Heater/pump fault** sensor that
-  turns on when the vaporizer reports the heater or pump did not reach the
-  state it was commanded into.
+  turns on when the vaporizer reports a timing fault in its heater control,
+  which stops both the heater and the pump.
+- Three more diagnostic binary sensors, also disabled by default: **Service
+  mode**, on while the vaporizer is running the burn-in mode that heats it to
+  230 °C for ten minutes on its own; **Air step mode**, on when the AIR button
+  steps the pump through 100/75/50 % instead of toggling it; and **Second
+  temperature stage**, on when the vaporizer adds its boost offset to the
+  target.
 - Diagnostic sensors for the raw **status registers 1/2/3** and **error history
   1/2**, reported as hex, also disabled by default. They carry the bits this
   integration does not interpret, which is what makes them worth reading when a
-  fault has to be diagnosed.
+  fault has to be diagnosed. **Status registers 4 and 5** are read too: they are
+  the vaporizer's two remaining status words, which nothing decodes yet and
+  which stay empty on a device that does not report them.
 - [`VOLCANO_BLE_SPEC.md`](VOLCANO_BLE_SPEC.md): a full description of the
   Volcano Hybrid's Bluetooth protocol — every characteristic, how its value is
   encoded, what each status-register bit means, and the firmware-update

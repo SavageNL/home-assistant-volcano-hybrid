@@ -49,6 +49,9 @@ async def async_get_config_entry_diagnostics(
                 "is_cooling": data.is_cooling,
                 "auto_shutdown": data.auto_shutdown,
                 "actuator_fault": data.actuator_fault,
+                "second_stage": data.second_stage,
+                "air_step_mode": data.air_step_mode,
+                "service_mode": data.service_mode,
                 "prv1_error": data.prv1_error,
                 "prv2_error": data.prv2_error,
                 "showing_celsius": data.showing_celsius,
@@ -63,11 +66,15 @@ async def async_get_config_entry_diagnostics(
             # The raw status registers and error history, as read by the vendor
             # app's "Analysis" report. Undecoded on purpose: these carry the
             # bits the integration does not interpret, which is exactly what
-            # makes them worth attaching to a bug report.
+            # makes them worth attaching to a bug report. prj4 and prj5 go
+            # beyond that report — they are the controller's other two status
+            # words, and read null on any device that does not serve them.
             "registers": {
                 "prj1": format_register(data.prj1),
                 "prj2": format_register(data.prj2),
                 "prj3": format_register(data.prj3),
+                "prj4": format_register(data.prj4),
+                "prj5": format_register(data.prj5),
                 "hist1": data.hist1,
                 "hist2": data.hist2,
             },

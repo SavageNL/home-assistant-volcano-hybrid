@@ -51,11 +51,16 @@ class VolcanoHybridData:
         self.led_brightness: int | None = None
 
         # Raw status registers and error history, kept purely for diagnostics.
-        # The vendor app reads exactly these five when building the report it
-        # asks users to send to support.
+        # The vendor app reads prj1-3 and both histories when building the
+        # report it asks users to send to support. prj4 and prj5 are the two
+        # remaining controller status words, which nothing decodes yet and
+        # which no device has been seen serving, so they stay None whenever the
+        # device does not offer them.
         self.prj1: int | None = None
         self.prj2: int | None = None
         self.prj3: int | None = None
+        self.prj4: int | None = None
+        self.prj5: int | None = None
         self.hist1: str | None = None
         self.hist2: str | None = None
 
@@ -67,11 +72,14 @@ class VolcanoHybridData:
         # the current temperature against the target to know it is ready.
         self.at_temperature: bool | None = None
         self.actuator_fault: bool | None = None
+        self.second_stage: bool | None = None
+        self.air_step_mode: bool | None = None
         self.prv1_error: bool | None = None
 
         # Prv2 attributes
         self.showing_celsius: bool | None = None
         self.display_on_cooling: bool | None = None
+        self.service_mode: bool | None = None
         self.prv2_error: bool | None = None
 
         # Prv3 attributes
@@ -103,10 +111,12 @@ class VolcanoHybridData:
 
         The device has no signal for its heating element: PRJSTAT1 does not
         change at all while it holds temperature, and its "setpoint reached"
-        bit only clears once the setpoint moves more than two degrees above
-        the current reading, so it keeps claiming to be at temperature through
-        small adjustments. Comparing the two temperatures the device does
-        report is finer grained and works in both directions.
+        bit is a latch that only clears when the target is raised 3 °C or more
+        above the *previous target* — never against the current reading, and
+        never when the target is lowered — so it keeps claiming to be at
+        temperature through small adjustments and all the way down a coast.
+        Comparing the two temperatures the device does report is finer grained
+        and works in both directions.
         """
         heater = self.heater_state
         if heater is None:

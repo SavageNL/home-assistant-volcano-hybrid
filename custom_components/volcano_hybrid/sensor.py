@@ -109,6 +109,24 @@ SENSOR_DESCRIPTIONS: dict[str, VolcanoSensorEntityDescription] = {
         entity_registry_enabled_default=False,
         value_fn=format_register,
     ),
+    # The controller's other two status words. No bit in them is decoded, and
+    # whether a device serves them at all is unverified: when the
+    # characteristics are missing their value is simply never set, so these
+    # read as unknown while every other entity carries on.
+    VolcanoSensor.PRJ4: VolcanoSensorEntityDescription(
+        key=VolcanoSensor.PRJ4,
+        translation_key=VolcanoSensor.PRJ4,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=format_register,
+    ),
+    VolcanoSensor.PRJ5: VolcanoSensorEntityDescription(
+        key=VolcanoSensor.PRJ5,
+        translation_key=VolcanoSensor.PRJ5,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=format_register,
+    ),
     VolcanoSensor.HIST1: VolcanoSensorEntityDescription(
         key=VolcanoSensor.HIST1,
         translation_key=VolcanoSensor.HIST1,
@@ -144,6 +162,8 @@ async def async_setup_entry(
             VolcanoSensorEntity(coordinator, VolcanoSensor.PRJ1),
             VolcanoSensorEntity(coordinator, VolcanoSensor.PRJ2),
             VolcanoSensorEntity(coordinator, VolcanoSensor.PRJ3),
+            VolcanoSensorEntity(coordinator, VolcanoSensor.PRJ4),
+            VolcanoSensorEntity(coordinator, VolcanoSensor.PRJ5),
             VolcanoSensorEntity(coordinator, VolcanoSensor.HIST1),
             VolcanoSensorEntity(coordinator, VolcanoSensor.HIST2),
         ]

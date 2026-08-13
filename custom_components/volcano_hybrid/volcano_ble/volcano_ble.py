@@ -43,6 +43,14 @@ SERVICE3_UUID = "10100000-5354-4f52-5a26-4249434b454c"
 CHARACTERISTIC_PRJ1V = "1010000c-5354-4f52-5a26-4249434b454c"
 CHARACTERISTIC_PRJ2V = "1010000d-5354-4f52-5a26-4249434b454c"  # 3
 CHARACTERISTIC_PRJ3V = "1010000e-5354-4f52-5a26-4249434b454c"  # 3
+# The controller keeps five status words; these two carry the other two
+# (VOLCANO_BLE_SPEC.md §1). A GATT dump of a V01.03 device confirms both are
+# served — 1010000f as read/write/notify, 10100010 as read/notify — but
+# nothing decodes their contents yet, so they are read as raw diagnostics
+# only. Read without subscribing, and a device that does not serve them (an
+# older module revision) is not treated as an error.
+CHARACTERISTIC_PRJ4V = "1010000f-5354-4f52-5a26-4249434b454c"  # 3
+CHARACTERISTIC_PRJ5V = "10100010-5354-4f52-5a26-4249434b454c"  # 3
 CHARACTERISTIC_SERIAL_NUMBER = "10100008-5354-4f52-5a26-4249434b454c"  # 3
 CHARACTERISTIC_FIRMWARE_VERSION = "10100005-5354-4f52-5a26-4249434b454c"  # 3
 CHARACTERISTIC_FIRMWARE_BLE_VERSION = "10100004-5354-4f52-5a26-4249434b454c"  # 3
@@ -53,10 +61,13 @@ CHARACTERISTIC_HIST2 = "10100016-5354-4f52-5a26-4249434b454c"  # 3
 
 MASK_PRJSTAT1_VOLCANO_ACTUATOR_FAULT = 16
 MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA = 32
+MASK_PRJSTAT1_VOLCANO_SECOND_STAGE = 64
 MASK_PRJSTAT1_VOLCANO_ENABLE_AUTOBLESHUTDOWN = 512
 MASK_PRJSTAT1_VOLCANO_TEMPERATURE_REACHED = 1024
 MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE = 8192
+MASK_PRJSTAT1_VOLCANO_AIR_STEP_MODE = 32768
 MASK_PRJSTAT1_VOLCANO_ERR = 16408
+MASK_PRJSTAT2_VOLCANO_SERVICE_MODE = 64
 MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA = 512
 MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING = 4096
 MASK_PRJSTAT2_VOLCANO_ERR = 59
@@ -251,17 +262,35 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             self.data.prj1 = prj1v
             self.data.heater = bool(prj1v & MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA)
             self.data.fan = bool(prj1v & MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE)
+            # Bit 9. The name is historical ("auto BLE shutdown armed"); per
+            # spec §3.1 it means the target has been reached at least once this
+            # heating cycle. That is what gates the start of the heater auto-off
+            # countdown, which is why the entity is named after the countdown.
+            # It has no clear path of its own: only switching the heater off
+            # (which wipes the register) resets it.
             self.data.auto_shutdown = bool(
                 prj1v & MASK_PRJSTAT1_VOLCANO_ENABLE_AUTOBLESHUTDOWN
             )
-            # Set once the heater has reached the setpoint and cleared again
-            # when the device goes off or the setpoint is raised out of reach.
+            # Bit 10, a latch: set the moment the reading reaches the target,
+            # cleared only by raising the target 3 °C or more above the
+            # previous one, and wiped when the heater goes off (spec §3.1.1).
             self.data.at_temperature = bool(
                 prj1v & MASK_PRJSTAT1_VOLCANO_TEMPERATURE_REACHED
             )
+            # Bit 4: a timing fault in the heater state machine, logged as code
+            # 0x3D, which inhibits both the heater and the pump. What the
+            # firmware times is not established, so spec §7 says to report it as
+            # a timing fault rather than name a physical cause for it.
             self.data.actuator_fault = bool(
                 prj1v & MASK_PRJSTAT1_VOLCANO_ACTUATOR_FAULT
             )
+            # Bit 6: the second temperature stage ("boost"), which adds a
+            # configurable offset to the target. Host-settable only — no
+            # front-panel key reaches it (spec §3.1, STRONG).
+            self.data.second_stage = bool(prj1v & MASK_PRJSTAT1_VOLCANO_SECOND_STAGE)
+            # Bit 15: makes the physical AIR button step the pump
+            # 100/75/50/off instead of toggling it (spec §3.1/§3.6, STRONG).
+            self.data.air_step_mode = bool(prj1v & MASK_PRJSTAT1_VOLCANO_AIR_STEP_MODE)
             self.data.prv1_error = bool(prj1v & MASK_PRJSTAT1_VOLCANO_ERR)
 
         await self._async_read_and_subscribe(
@@ -292,12 +321,22 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             self.data.display_on_cooling = bool(
                 prj2v & MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING == 0
             )
+            # Bit 6: the service / burn-in mode, entered by holding HEAT and AIR
+            # together. It drives the device to 230 °C for ten minutes with the
+            # pump off, so spec §3.6 says to surface it rather than ignore it.
+            self.data.service_mode = bool(prj2v & MASK_PRJSTAT2_VOLCANO_SERVICE_MODE)
             self.data.prv2_error = bool(prj2v & MASK_PRJSTAT2_VOLCANO_ERR)
 
         def _parse_prj3v(data: bytearray) -> None:
             prj3v = int.from_bytes(data, "little")
             self.data.prj3 = prj3v
             self.data.vibration = bool(prj3v & MASK_PRJSTAT3_VOLCANO_VIBRATION == 0)
+
+        def _parse_prj4v(data: bytearray) -> None:
+            self.data.prj4 = int.from_bytes(data, "little")
+
+        def _parse_prj5v(data: bytearray) -> None:
+            self.data.prj5 = int.from_bytes(data, "little")
 
         def _parse_hist1(data: bytearray) -> None:
             self.data.hist1 = data.hex()
@@ -414,6 +453,12 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             ),
             self._async_read_and_subscribe(
                 SERVICE3_UUID, CHARACTERISTIC_HIST2, _parse_hist2, subscribe=False
+            ),
+            self._async_read_optional(
+                SERVICE3_UUID, CHARACTERISTIC_PRJ4V, _parse_prj4v
+            ),
+            self._async_read_optional(
+                SERVICE3_UUID, CHARACTERISTIC_PRJ5V, _parse_prj5v
             ),
         )
         _LOGGER.debug("Initial characteristics read complete")
@@ -547,6 +592,31 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             msg = f"Characteristic {characteristic} not found"
             raise BleakError(msg)
         return char
+
+    async def _async_read_optional(
+        self,
+        service_uuid: str,
+        characteristic: str,
+        value_change_callback: Callable[[bytearray], Awaitable[None] | None],
+    ) -> None:
+        """
+        Read a characteristic that is not known to exist on every device.
+
+        The initial read runs as one asyncio.gather, so a characteristic that a
+        firmware or BLE-module revision does not serve would otherwise take the
+        whole connect down with it: _get_characteristic raises BleakError when
+        it is missing, and the remaining reads and subscriptions in the gather
+        never happen. Anything read through here leaves its value unset instead
+        and the rest of the device still comes up.
+        """
+        try:
+            await self._async_read_and_subscribe(
+                service_uuid, characteristic, value_change_callback, subscribe=False
+            )
+        except BleakError as err:
+            _LOGGER.debug(
+                "Optional characteristic %s is unavailable: %s", characteristic, err
+            )
 
     async def _async_read_and_subscribe(
         self,

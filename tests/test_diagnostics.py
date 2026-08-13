@@ -64,6 +64,8 @@ async def test_diagnostics_include_raw_registers_and_history(
     data.prj1 = 0x2020
     data.prj2 = 0x0000
     data.prj3 = 0x0400
+    data.prj4 = 0x1234
+    data.prj5 = 0x5678
     data.hist1 = "0011223344556677"
     data.hist2 = "8899aabbccddeeff"
 
@@ -73,6 +75,8 @@ async def test_diagnostics_include_raw_registers_and_history(
     assert registers["prj1"] == "0x2020"
     assert registers["prj2"] == "0x0000"
     assert registers["prj3"] == "0x0400"
+    assert registers["prj4"] == "0x1234"
+    assert registers["prj5"] == "0x5678"
     assert registers["hist1"] == "0011223344556677"
     assert registers["hist2"] == "8899aabbccddeeff"
 
@@ -88,6 +92,8 @@ async def test_diagnostics_registers_before_connect(
         "prj1": None,
         "prj2": None,
         "prj3": None,
+        "prj4": None,
+        "prj5": None,
         "hist1": None,
         "hist2": None,
     }
