@@ -11,7 +11,7 @@ specification for. Every claim is tagged with where it came from.
 | Tag | Meaning |
 |---|---|
 | **CONFIRMED** | Read from the vendor's own web app (`js/volcano.js`, ground truth for the BLE layer) and/or observed live on a device. |
-| **STRONG** | Derived from a Ghidra decompile of the V01.03 application firmware (STM32F072). Consistent, but not observed live. |
+| **STRONG** | Derived from a decompile/disassembly of the V01.03 application firmware (STM32L4). Consistent, but not observed live. |
 | **SPECULATIVE** | Plausible from firmware structure or naming. Must be confirmed empirically before anything depends on it. |
 
 Live observations were made against a Volcano Hybrid running firmware **V01.03**
@@ -39,10 +39,23 @@ Two facts drive most of the integration's design:
 
 ### Architecture behind the GATT
 
-The GATT server is served by a **separate BLE module**; the STM32F072 main controller
-talks to that module over USART1 (STRONG — peripheral map in the firmware decompile). The
-status registers below are the controller's status words as forwarded to the module,
-which is why they read like internal firmware state rather than a designed API.
+The GATT server is served by a **separate BLE module**; the STM32 main controller talks to
+that module over USART1 (STRONG — peripheral map in the firmware decompile). The status
+registers below are the controller's status words as forwarded to the module, which is why
+they read like internal firmware state rather than a designed API.
+
+The three PRJSTAT characteristics are the controller's own 16-bit status words at RAM
+offsets `+0x14`, `+0x16` and `+0x18`, forwarded verbatim — the module does not remap or
+renumber the bits. (STRONG — every bit whose meaning was established live is written at the
+matching offset in the firmware.) The controller keeps **five** such words; `1010000f` and
+`10100010` expose the other two, which this integration does not read.
+
+The main controller is an **STM32L4 (Cortex-M4)**, specifically the L4x2/L4x3 line: the image
+uses Thumb-2 instructions (`strd`, `tbb`, `cbz`, register-shifted loads), carries a
+Cortex-M3/M4 vector table (MemManage / BusFault / UsageFault, SVC at `0x2C`, PendSV,
+SysTick), and addresses its ADC at `0x50040000`, its GPIO bank at `0x48000000` and an
+on-chip segment-LCD controller at `0x40002400`. Anyone re-deriving the firmware claims here
+needs the matching SVD; register names taken from an STM32F0 SVD do not line up.
 
 ### UUID scheme
 
@@ -75,8 +88,8 @@ digit is always `0`.
 | `10110001` | Current temperature | `uint16`, deci-°C | Read + **notify**. Only notifies on change. CONFIRMED |
 | `10110003` | Target temperature | `uint16`, deci-°C | Read/write + **notify**. Writable range 40–230 °C. CONFIRMED |
 | `10110005` | LED brightness | `uint16`, percent 0–100 | Read/write. CONFIRMED |
-| `1011000c` | Auto-off countdown | `uint16`, seconds remaining | Read + **notify**. Counts down while the device is on; `0` when not running. CONFIRMED |
-| `1011000d` | Auto-off setting | `uint16`, seconds | Read/write. The UI offers 0–360 min in 30-min steps. CONFIRMED |
+| `1011000c` | Auto-off countdown — the **session** countdown (§2) | `uint16`, seconds remaining | Read + **notify**. Runs from the moment an actuator is switched on; `0` when not running. CONFIRMED (live) |
+| `1011000d` | Auto-off setting — seeds `1011000c` | `uint16`, seconds | Read/write. The UI offers 0–360 min in 30-min steps. CONFIRMED (live) |
 | `1011000f` | Heater **on** | write 1 byte (`0x01`) | Command characteristic. CONFIRMED |
 | `10110010` | Heater **off** | write 1 byte (`0x00`) | Command characteristic. CONFIRMED |
 | `10110013` | Pump/fan **on** | write 1 byte (`0x01`) | Command characteristic. CONFIRMED |
@@ -94,6 +107,36 @@ Writes are **not acknowledged with the resulting state**. The device confirms a 
 pushing a PRJSTAT1 (or target-temperature) notification, which can arrive *before* the
 write call returns — see §5.
 
+**Auto-off is three countdowns.** The controller decrements each of them once per second
+(STRONG — the 1 Hz handler, and every writer of the three words swept across the image):
+
+| Counter | Loaded when | Loaded from | On reaching zero |
+|---|---|---|---|
+| Heater timeout | the heater is switched on | a config word, factory default 65535 s; not exposed in this service | heater off |
+| Session timeout | the heater **or** the pump is switched on | a config word, factory default 1800 s, exposed as `1011000d` | heater **and** pump off |
+| Second-stage timeout | the second stage is switched on (PRJSTAT1 bit 6) | fixed 180 s | second stage off |
+
+**The heater timeout starts when the target is first reached, not when the heater is switched
+on.** Until PRJSTAT1 bit 9 sets, the control loop reloads that counter to its full value on
+every pass, so a long heat-up does not count against it. The session timeout has no such gate
+and runs from the moment its actuator starts.
+
+Nothing else reloads them: key presses, setpoint changes and temperature notifications leave
+all three alone. The only other writers are the interlocks, which zero all three while the
+heater is off — which is why the countdown reads `0` on an idle device — and **PRJSTAT2
+bit 7**, which reloads the first two every second and so suspends auto-off entirely while it
+is set.
+
+The controller exports each countdown and each setting as its own telegram register and does no
+combining. **`1011000c` is the session countdown and `1011000d` its setting** (CONFIRMED, live):
+switching the heater on from cold at 30 °C with a 178 °C target, the countdown started at the
+configured 60.0 minutes and fell one second per second while the block heated — behaviour only
+the session counter has, since the heater counter is pinned at full value until the target is
+first reached. The heater countdown and the second-stage countdown are not exposed in this
+service.
+
+A `setting − countdown` derivation is therefore valid for this pair.
+
 ---
 
 ## 3. Service `10100000` — status, identity and history
@@ -109,8 +152,8 @@ write call returns — see §5.
 | `1010000d` | **PRJSTAT2** | `uint16` bit field | Read + **notify** + write (see §3.4). Display settings and a second error group. §3.2 |
 | `1010000e` | **PRJSTAT3** | `uint16` bit field | Read + **notify** + write (see §3.4). Vibration setting. §3.3 |
 | `10100011` | Code number | `uint16` write | Writing `4711` unlocks entry into the bootloader. Not touched by this integration. CONFIRMED (vendor app) |
-| `10100015` | **HIST1** | 8 bytes, opaque | Status-word snapshot captured at the last fault. §3.5 |
-| `10100016` | **HIST2** | 8 bytes, opaque | Second fault snapshot. §3.5 |
+| `10100015` | **HIST1** | ASCII hex text | Fault log — recent fault codes and/or per-code counts. §3.5 |
+| `10100016` | **HIST2** | ASCII hex text | The other half of the fault log. §3.5 |
 
 ### 3.1 PRJSTAT1 — `1010000c`
 
@@ -119,33 +162,44 @@ change is pushed.
 
 | Bit | Mask | Meaning | Confidence |
 |---:|---:|---|---|
-| 0 | `0x0001` | Heater on — the switch, not the element (see below) | CONFIRMED (live) |
-| 1 | `0x0002` | Heater on (companion bit, tracks bit 0) | CONFIRMED (live) |
-| 3 | `0x0008` | Error bit A — cause unknown | error CONFIRMED, cause SPECULATIVE |
-| 4 | `0x0010` | **Actuator feedback fault** — heater or pump did not reach the state it was commanded into | STRONG |
-| 5 | `0x0020` | Heater enabled (`HEIZUNG_ENA`) — the heater switch state | CONFIRMED |
-| 9 | `0x0200` | Auto-BLE-shutdown armed — set on *first* reaching the setpoint, then stays set until the heater goes off | CONFIRMED (live) |
-| 10 | `0x0400` | **Setpoint reached** — within a ±2 °C band of the target, and never cleared by lowering the target (§3.1.1) | CONFIRMED (live) |
-| 13 | `0x2000` | Pump/fan FET enabled (`PUMPE_FET_ENABLE`) — the fan switch state | CONFIRMED |
-| 14 | `0x4000` | Error bit C — cause unknown | error STRONG, cause SPECULATIVE |
-| — | `0x4018` | `ERR` — the OR of bits 3, 4 and 14; any of them means "the device reports a fault" | CONFIRMED |
+| 0 | `0x0001` | Heater **requested** — the switch, not the element (see below) | CONFIRMED (live) |
+| 1 | `0x0002` | Heater **interlock passed** — set only while bits 0 and 5 are both set and no heater fault is latched | STRONG |
+| 3 | `0x0008` | **Heater fault, logged as code `0x3C`** — inhibits the heater only | STRONG |
+| 4 | `0x0010` | **Fault, logged as code `0x3D`** — inhibits **both** the heater and the pump | STRONG |
+| 5 | `0x0020` | Heat regulation running (`HEIZUNG_ENA`) | CONFIRMED |
+| 6 | `0x0040` | Second temperature stage ("boost") — adds a configurable offset to the target. Host-settable; no front-panel key reaches it | STRONG |
+| 7 | `0x0080` | Control-loop mode: clear = PID control (normal), set = on/off control | STRONG |
+| 8 | `0x0100` | Selects how the regulation value is scaled in the validation path: raw, or divided by 10 and linearly transformed. Internal, host-settable | STRONG |
+| 9 | `0x0200` | Target has been reached at least once this heating cycle — set every pass while `target − current ≤ 0`, cleared only when the heater goes off. Also gates the start of the heater auto-off countdown (§2) | CONFIRMED (live) |
+| 10 | `0x0400` | **Setpoint reached** — set the moment `current ≥ target`; cleared only by *raising* the target ≥3.0 °C (§3.1.1) | CONFIRMED (live) |
+| 12 | `0x1000` | Pump/fan **requested** | STRONG |
+| 13 | `0x2000` | Pump/fan FET enabled (`PUMPE_FET_ENABLE`) — set while bit 12 is set and no pump fault is latched | CONFIRMED |
+| 14 | `0x4000` | **Pump interlock fault** — read as a pump inhibit, but *never written* by the application firmware (see below) | STRONG |
+| 15 | `0x8000` | Air step mode — makes the physical AIR button cycle the pump 100 % → 75 % → 50 % → off instead of toggling. Host-settable | STRONG |
+| — | `0x4018` | `ERR` — the OR of bits 3, 4 and 14 | CONFIRMED |
 
-Bit 4 is the only error bit whose cause is known. It is set by the firmware's
-post-actuation check: after switching the heater or the pump, the controller verifies the
-actuator actually responded, and flags this bit when it did not (STRONG — from
-`FUN_08001fbc` calling the `FUN_08007938`/`FUN_08007930` checks). Bits 3 and 14 are
-deliberately left undecoded rather than guessed; §7 explains how to pin them down.
+The `0x4018` bits are the actuator interlocks. Two functions run every control pass and decide
+whether each actuator may run (STRONG):
 
-**Bits 0, 1 and 5 all track the heater switch, not the element.** Bit 5 is `HEIZUNG_ENA`;
-bits 0 and 1 move with it. None of them is a duty-cycle signal: holding at a 180 °C setpoint
-for 3 minutes 40 seconds, PRJSTAT1 did not change once, staying at `0x0623` throughout while
-the element must have been cycling to hold temperature. **There is no "element energised"
-signal anywhere in PRJSTAT1 or PRJSTAT3** (CONFIRMED, live). A client that wants to show
-whether the device is working towards its setpoint has to compare the reported current
-temperature against the target — see §3.1.1.
+| Interlock | Inhibits on | Clears on a fault |
+|---|---|---|
+| Heater | bit 3, bit 4, or any of the five PRJSTAT2 error bits (§3.2) | bits 0 and 1 |
+| Pump | bit 14, bit 4, or the same five PRJSTAT2 bits | bits 12 and 13 |
 
-**The three-state observation** that established bit 10, taken on one device across a full
-heat cycle with a 40 °C setpoint:
+Bit 3 stops the heater, bit 14 stops the pump, bit 4 stops both. Because the heater interlock
+clears bits 0 and 1, a faulted device reports itself switched off.
+
+Bits 3 and 4 come from the same check in the heater control state machine: at two points it
+measures an elapsed tick count, and raises the bit when the count is under 100, logging code
+`0x3C` and `0x3D` respectively. The bit clears once the count reaches 100. What the counters
+measure is not established — surface these as timing faults, not as a named cause.
+
+Bit 14 is read by the pump interlock but written nowhere in the application image, so it should
+always read 0 on this firmware. It may be set from the bootloader-resident region (§6), or be
+vestigial. Do not build a fault indicator on it without observing it set on a device.
+
+The three-state observation that established bit 10, taken on one device across a full heat
+cycle with a 40 °C setpoint:
 
 | | Off / cold | Heating, 31 °C (below target) | At target, 40 °C |
 |---|:--:|:--:|:--:|
@@ -159,10 +213,26 @@ not a "heating" signal, and — unlike bit 10 — it does not flip back afterwar
 setpoint again clears bit 10 while bit 9 stays set (`0x0223`). Only switching the heater off
 clears it.
 
-#### 3.1.1 The tolerance band on bit 10
+#### 3.1.1 When bit 10 sets and clears
 
-Bit 10 is a *proximity* flag with hysteresis, not an activity flag. Measured on one device
-holding at temperature, raising the setpoint in steps and watching the register:
+```
+set:    current >= target                     →  bit 10 = 1
+clear:  new_target >= previous_target + 3.0   →  bit 10 = 0
+```
+
+Both sites use the same constant, `0x1e` = 30 tenths = 3.0 °C (STRONG — the set site in the
+heater control loop, the clear sites in the BLE-write and front-panel paths).
+
+The bit is a latch: it means the device got to temperature, not that it is at temperature now.
+The set side has no tolerance. The clear side compares the new target against the **previous
+target**, never against the current reading, so raising the target by 3.0 °C or more clears the
+bit and lowering it never does.
+
+Bit 9 is set by the same `current >= target` test on the same pass. It has no clear path, which
+is why it stays set once the device has reached temperature.
+
+Measured on one device, raising the setpoint in steps while it held temperature (CONFIRMED,
+live):
 
 | Setpoint change | Bit 10 cleared? | PRJSTAT1 |
 |---|:--:|---|
@@ -172,54 +242,126 @@ holding at temperature, raising the setpoint in steps and watching the register:
 | 186 → 190 (+4) | **yes**, for 10.7 s | `0x0623` → `0x0223` → `0x0623` |
 | 190 → 170 (−20) | no | `0x0623` unchanged for the whole coast down |
 
-So the device treats **±2 °C as "at temperature"**, and only admits to heating on a jump of
-3 °C or more — the same threshold as the vibration alert, which fires on the same condition.
-The flag is also **asymmetric**: lowering the setpoint far below the current reading never
-clears it, because "reached" means the device got there, not that it is there now. In the
-+1 and +2 cases the reported temperature visibly climbed to the new setpoint with bit 10
-still set (CONFIRMED, live).
+The 10.7 s is the time the element took to close the new gap and re-satisfy `current >= target`.
+There is no timer on the bit.
 
-There is one artefact worth expecting: on settling, bit 10 was seen to clear and re-set
-within a single second (`0x0623` → `0x0223` → `0x0623`), which shows up as a one-frame
-flicker in anything driven straight off the bit.
+On settling, bit 10 was once seen to clear and re-set within a single second, which shows up as
+a one-frame flicker in anything driven straight off it.
 
 **Switching the heater off clears the whole register at once.** PRJSTAT1 goes to `0x0000`
 the instant the heater is switched off — indistinguishable from a stone-cold device, even
 with the block still at 170 °C and the display lit. **The cooldown phase is not observable**
 (CONFIRMED, live); see §4 for how the integration infers it.
 
+The controller does this in one step: the moment bit 0 reads clear it masks PRJSTAT1 with
+`& ~0x0660`, wiping bits 5, 6, 9 and 10 together, while the interlock functions drop bits 1,
+12 and 13. No cooldown state is retained anywhere in the register (STRONG).
+
+#### 3.1.2 No bit reports the element being energised
+
+**Bits 0, 1 and 5 track the heater switch, not the element.** Bit 5 means the regulation loop
+is running; bit 1 is bit 0 AND bit 5, gated by the interlock. In the normal control mode all
+three follow the switch. Holding at a 180 °C setpoint for 3 minutes 40 seconds, PRJSTAT1 stayed
+at `0x0623` without a single change while the element was necessarily cycling to hold
+temperature (CONFIRMED, live). To show whether the device is working towards its setpoint, a
+client must compare the reported current temperature against the target (§4).
+
+This follows from the control loop. With bit 7 clear — the normal mode — the controller runs a
+**PID loop** whose output is a percentage, not a decision. Every 100 ms it computes `P + I + D`
+from the error in tenths of a degree, using gains 300, 20 and 500 from the config block, clamps
+the sum to 0…100000, scales it to 0–100 %, and maps that through a 101-entry lookup table to a
+mains phase angle. The element runs at a continuously varying fraction of full power; P alone
+saturates at an error of 33.3 °C, so a larger gap means full power and the taper happens inside
+that band. The percentage is never exported and no bit encodes it.
+
+With **bit 7 set** the controller uses on/off control instead, and bit 5 becomes the demand
+signal: set when the target is more than 1.0 °C above the reading, cleared when the reading
+passes 1.0 °C above the target, driving the element at 100 % while set. Bit 5 is an element
+signal only in this mode.
+
+Nothing in the firmware sets bit 7; it is host-settable only, and whether any characteristic
+reaches the underlying command is decided in the BLE module. On/off control widens temperature
+swings and increases thermal cycling on a mains-heated aluminium block, so treat it as a
+diagnostic path rather than a feature (STRONG).
+
 ### 3.2 PRJSTAT2 — `1010000d`
 
 | Bit | Mask | Meaning | Confidence |
 |---:|---:|---|---|
-| 0, 1, 3, 4, 5 | `0x003b` | `ERR` — the OR of these bits is a second fault group; the individual bits are unknown | error CONFIRMED, individual bits SPECULATIVE |
+| 0 | `0x0001` | **Regulation sample out of range** — logs code `0x3F` when the averaged sample exceeds 799, or `0x2D` when it is pinned below 4 | STRONG |
+| 1 | `0x0002` | **Regulation value outside its valid window** — logs code `0x40` | STRONG |
+| 3 | `0x0008` | **Heartbeat / comms timeout** — an internal counter reached 5000 ticks without being serviced; logs code `0x41` | STRONG |
+| 4 | `0x0010` | **Heater power/resistance feedback low** (below 6250) — logs code `0x43` | STRONG |
+| 5 | `0x0020` | **Heater power/resistance feedback high** (above 34500) — logs code `0x44` | STRONG |
+| 6 | `0x0040` | Service / burn-in mode active (entered from the front panel, see §3.6) | STRONG |
+| 7 | `0x0080` | **Auto-off hold** — while set, both auto-off countdowns are reloaded every second and never expire. Host-settable | STRONG |
+| 8 | `0x0100` | Host-settable flag, purpose undecoded | STRONG |
 | 9 | `0x0200` | Display in Fahrenheit (**0 means Celsius**) | CONFIRMED |
+| 10 | `0x0400` | Keypad test armed (production test, see §3.6) | STRONG |
+| 11 | `0x0800` | Settings-changed notification flag | STRONG |
 | 12 | `0x1000` | Display stays on while cooling (**0 means enabled**) | CONFIRMED |
-| 13 | `0x2000` | Temperature-update strobe — normally set, drops to 0 for about a second around each 1 °C change in the reported temperature | STRONG |
+| 13 | `0x2000` | Displayed temperature has settled — clear while the shown value is still stepping toward the reading | CONFIRMED (mechanism) |
+| — | `0x003b` | `ERR` — the OR of bits 0, 1, 3, 4 and 5 | CONFIRMED |
 
 Note the inverted polarity of bits 9 and 12: the clear bit is the enabled state.
 
-Bit 13 is worth knowing about mainly so it is not mistaken for something it is not. It was
-first seen pulsing throughout a cooldown, at a rate that slowed as the device cooled, which
-makes it look like a cooldown or display signal. It is neither: lining the dips up against
-the current-temperature notifications puts every one of them within ±0.6 s of a 1 °C step,
-and the apparent slowdown is just the device losing degrees more slowly as it cooled. It
-pulses whenever the temperature is moving, heating included. Two of roughly fourteen dips in
-the sample did not line up cleanly — notifications are unacknowledged, so a dropped one is
-the likely explanation — which is why this is STRONG rather than CONFIRMED. Anything
-watching PRJSTAT2 for settings changes should ignore this bit.
+All five `0x003b` bits inhibit **both** actuators: each interlock tests the whole group, so any
+one of them switches the device off and makes PRJSTAT1 read as not running (STRONG). The group
+is a latched summary of the heater-regulation loop's own faults, which is why it duplicates no
+PRJSTAT1 bit — PRJSTAT1 carries the switch state and the timing faults, PRJSTAT2 the regulation
+and feedback faults.
+
+Bits 4 and 5 bracket the heater's measured power/resistance feedback: low reads as an open or
+under-driven element, high as an over-current or shorted one. Bit 3 is a watchdog on internal
+servicing, not a thermocouple, overtemperature or bag-detection event; do not label it as a
+sensor fault. Genuine sensor faults appear in the history as codes `0x35` (reading pinned below
+40.0 °C, short) and `0x36` (reading pinned near `0xFFFF`, open).
+
+Bit 13 belongs to the display, not the thermal system. The display module walks its shown value
+toward the real reading in 1.0 °C steps, clearing bit 13 during the walk and setting it once the
+values match, so the bit dips once per displayed degree of change and is steady otherwise. Live,
+this reads as a pulse whose rate tracks how fast the temperature is moving: throughout a
+cooldown every dip fell within ±0.6 s of a 1 °C step. It is not a cooldown signal and not a
+measurement strobe. Clients watching PRJSTAT2 for settings changes should mask it out.
+
+### 3.2.1 Fault codes
+
+The bits above say *that* something failed; the history characteristics (§3.5) say *what*.
+The complete code table recovered from the firmware:
+
+| Code | Meaning |
+|---:|---|
+| `0x2D` (45) | Regulation reading pinned **low** (below 4) |
+| `0x35` (53) | **Temperature sensor short** — reading below 400 (40.0 °C) |
+| `0x36` (54) | **Temperature sensor open** — reading pinned near `0xFFFF` |
+| `0x3C` (60) | Heater regulation timing fault — raises PRJSTAT1 bit 3 |
+| `0x3D` (61) | Heater regulation timing fault — raises PRJSTAT1 bit 4 |
+| `0x3F` (63) | Regulation average **too high** (above 799) |
+| `0x40` (64) | Regulation value **outside its valid window** |
+| `0x41` (65) | **Heartbeat / comms timeout** (5000 ticks) |
+| `0x43` (67) | Heater feedback **low** (below 6250) |
+| `0x44` (68) | Heater feedback **high** (above 34500) |
+| `0x48` (72) | Heater feedback **deviation** beyond its band |
 
 ### 3.3 PRJSTAT3 — `1010000e`
 
 | Bit | Mask | Meaning | Confidence |
 |---:|---:|---|---|
+| 0 | `0x0001` | Hardware-option flag — seeded at boot from the model class, and **toggleable from the front panel** (§3.6). Gates an accessory sense/drive line on the board | STRONG |
+| 5 | `0x0020` | Enables entry into the service / burn-in mode (§3.6) | STRONG |
+| 6 | `0x0040` | Saved copy of bit 0, written during shutdown | STRONG |
 | 10 | `0x0400` | Vibration (**0 means enabled**) | CONFIRMED |
 | 12 | `0x1000` | Mirror of PRJSTAT1 bit 10 — set at the setpoint (`0x0467` → `0x1467`) | CONFIRMED (live) |
 
-Bit 12 tracked PRJSTAT1 bit 10 exactly across a full cycle, including the ±2 °C tolerance
-band and the drop to `0x0467` when the heater goes off, so the two carry the same
-information. PRJSTAT1 bit 10 is preferred for "ready" because PRJSTAT1 is the register the
-device pushes on change.
+The firmware sets and clears bit 12 at the same sites as PRJSTAT1 bit 10, and it tracked that
+bit exactly across a full cycle, including the drop to `0x0467` when the heater goes off. Use
+PRJSTAT1 bit 10 for "ready" — PRJSTAT1 is the register the device pushes on change.
+
+Bit 0 is set for Hybrid-class units and clear for Medic-class ones at boot. When set, the
+controller drives one GPIO low, samples a second as an input (reflecting it into bit 2) and
+drives a third from bit 4; when clear it tears that down and configures two interrupt inputs
+instead. Which accessory or sensor that line serves is not established, so treat the bit as
+read-only.
 
 ### 3.4 Writing settings bits (PRJSTAT2 / PRJSTAT3)
 
@@ -240,14 +382,43 @@ characteristics (§2).
 
 ### 3.5 HIST1 / HIST2 — `10100015` / `10100016`
 
-These are **not** error codes. On entering an error state the firmware copies a 3 × 16-bit
-history buffer — a snapshot of the status words at fault time (STRONG — `FUN_08001f74` /
-`FUN_080026b6`). The vendor app reads them and shows them as raw hex in the report it asks
-users to send to support, and this integration does the same: they are exposed verbatim as
-diagnostic sensors and in the downloadable diagnostics.
+The device's fault log, as ASCII hex text. The firmware maintains it in two parts (STRONG — the
+two logging routines and all of their callers):
 
-Decoding them means matching the snapshot against the PRJSTAT bit maps above, for a fault
-whose cause is known. See §7.
+- a **16-entry ring buffer of code bytes**, most recent first; every fault pushes its code;
+- a **per-code counter array**, saturating at `0xfff0`, holding how many times each code has
+  occurred.
+
+Codes are listed in §3.2.1. Decode an entry by splitting the hex into bytes and looking each one
+up in that table. Neither structure holds a timestamp or a captured temperature, so the log
+gives what failed and how often, never when or at what temperature.
+
+Which characteristic carries the ring and which the counters needs a device with a non-empty log
+to settle (§7). The vendor app reads both and shows them as raw hex in the report it asks users
+to send to support; this integration exposes them verbatim as diagnostic sensors and in the
+downloadable diagnostics.
+
+### 3.6 The front panel can change these registers too
+
+The front-panel keys write several of the same bits, so these registers can change with no BLE
+write outstanding (STRONG — the controller's key handler). Only the register effects are listed
+here; the full front-panel behaviour is out of scope for a BLE spec.
+
+| Keys | Effect on the registers |
+|---|---|
+| **HEAT** | toggles PRJSTAT1 bit 0 |
+| **AIR** | toggles PRJSTAT1 bit 12 — unless PRJSTAT1 bit 15 is set, in which case it steps the pump 100/75/50/off |
+| **+** / **−** | change the target by 1.0 °C per step, and clear PRJSTAT1 bit 10 under the §3.1.1 rule. **Both keys are inert while the heater is off** — the front panel cannot set a temperature on a cold device, only a BLE client can |
+| **−** and **+** together, ~0.5 s | **toggles PRJSTAT2 bit 9 (°C ↔ °F)** — also only while the heater is on |
+| **−** and **AIR** together, ~0.5 s | toggles PRJSTAT3 bit 0, on Hybrid-class units only |
+| **HEAT** and **AIR** together, ~3 s | enters the service / burn-in mode: sets PRJSTAT2 bit 6, forces the target to 230.0 °C, forces Celsius, switches the heater on and the pump off, and sets the heat auto-off to 600 s. Requires PRJSTAT3 bit 5 and both actuators already off |
+
+Two consequences for a client. The °C/°F setting and the target can change unprompted, so a
+last write is not authoritative. And PRJSTAT2 bit 6 reading set means the device is in a mode
+that drives itself to maximum temperature for ten minutes — surface it rather than ignoring it.
+
+PRJSTAT2 bit 10 arms a production keypad test, which requires all five keys to be pressed once
+each. The panel has a fifth key that does nothing in normal operation.
 
 ---
 
@@ -270,15 +441,15 @@ Derived values, all computed in the integration rather than read from the device
 | Value | Derivation |
 |---|---|
 | Total heat time | `10110015 * 60 + 10110016` minutes |
-| Current on time | auto-off setting (`1011000d`) − auto-off countdown (`1011000c`) |
-| Ready | PRJSTAT1 bit 10, verbatim — so it inherits the ±2 °C band and stays on while the device coasts down (§3.1.1) |
-| Heating | current temperature < target temperature. **Not** bit 10: that flag ignores changes of 2 °C or less, and no element signal exists to use instead (§3.1.1) |
+| Current on time | auto-off setting (`1011000d`) − auto-off countdown (`1011000c`); a matched pair, both the session timer (§2) |
+| Ready | PRJSTAT1 bit 10, verbatim — so it only re-arms when the target is raised ≥3 °C, and stays on while the device coasts down (§3.1.1) |
+| Heating | current temperature < target temperature. Not bit 10, which does not track the gap, and no element signal exists to use instead (§3.1.2) |
 | Cooling | heater off, display-on-while-cooling enabled (PRJSTAT2 bit 12) and current temperature ≥ 40 °C. Inferred — the device reports nothing during cooldown |
 | HVAC action | heater on and heating → `heating`; heater on and holding → *none reported*, so the card names the mode; heater off and cooling → `idle`; otherwise → `off` |
 
 ---
 
-## 5. Behaviour worth knowing before writing a client
+## 5. Client implementation notes
 
 **A write's confirmation can arrive before the write returns.** The device pushes the
 PRJSTAT1 notification as soon as the heater or pump toggles, and that notification can be
@@ -305,9 +476,8 @@ on one.
 
 ## 6. Firmware update (bootloader) — documented, not implemented
 
-The Volcano Hybrid can be re-flashed over BLE. This integration does not do it, on purpose.
-The protocol is documented here anyway, because "it is impossible" would be wrong and the
-real reasons are worth stating plainly.
+The Volcano Hybrid can be re-flashed over BLE. The protocol is documented here; §6.2 gives the
+reasons this integration does not implement it.
 
 ### 6.1 The vendor's update flow
 
@@ -340,7 +510,7 @@ real reasons are worth stating plainly.
    | `Wc <crc>` | Write CRC |
    | `Wl ` | Leave bootloader mode |
 
-   Pages are 1024 bytes on the wire (2048-byte flash pages on the STM32F072), written with
+   Pages are 1024 bytes on the wire (2048-byte flash pages on the controller), written with
    write-without-response and verified by CRC.
 
 All of this is ordinary GATT. "Web Bluetooth", which the vendor app uses, is only the
@@ -377,23 +547,31 @@ when it moves ahead, which is the signal to test and bump the constant by hand.
 
 What is still undecoded, in the order it is worth attacking:
 
-1. **PRJSTAT1 error bits 3 and 14**, and the individual **PRJSTAT2 error bits**
-   (`0x0001`, `0x0002`, `0x0008`, `0x0010`, `0x0020`).
-2. **HIST1 / HIST2 layout** — the three 16-bit words are a snapshot of status registers,
-   but which register lands in which word is not established.
-3. **`10100003`**, the second firmware string.
+1. **What PRJSTAT1 bits 3 and 4 physically measure.** The mechanism is known — an elapsed tick
+   count coming in under 100 at two points in the heater state machine — but not what is being
+   timed, so the codes `0x3C` / `0x3D` should be surfaced as codes, not as named causes.
+2. **PRJSTAT1 bit 14.** Read as a pump inhibit, written by nothing in the application image.
+   Either it comes from the bootloader-resident region or it is dead. Worth watching, not
+   worth labelling.
+3. **HIST1 vs HIST2** — which one is the 16-entry ring and which the per-code counters.
+4. **The undecoded host-settable flags**: PRJSTAT2 bit 8, and the purpose of the hardware line
+   PRJSTAT3 bit 0 gates.
+5. **`10100003`**, which is a second copy of the application version string rather than a
+   distinct identity — but which telegram backs it is decided in the BLE module, not the
+   controller.
 
-The method for the error bits is observation, not more decompiling. Enable the *Status
+Items 1, 3 and 4 are settled by observation rather than more decompiling. Enable the *Status
 register 1/2/3* and *Error history 1/2* diagnostic sensors, then when a real fault occurs —
 the device shows an error, or the *Prv1 error* / *Prv2 error* sensors turn on — record:
 
 - which bit inside the `ERR` mask is set (`0x4018` for PRJSTAT1, `0x003b` for PRJSTAT2),
 - what the device was doing (heating, pumping, idle, just switched on),
 - what physically happened (bag obstructed, pump blocked, overheat, filling chamber missing),
-- the HIST1/HIST2 values, which hold the snapshot from the last fault.
+- the HIST1/HIST2 values, and which end of them moved.
 
-Build the mapping from real cases and only then name the bits in code. A wrong label on a
-fault sensor is worse than no label: it sends people to fix the wrong thing.
+The names in §3.2 are the conditions the firmware itself tests, which is as far as static
+analysis reaches; confirming each against a reproduced fault is the remaining step. A wrong
+label on a fault sensor is worse than no label, because it sends people to fix the wrong thing.
 
 ---
 
@@ -403,10 +581,17 @@ fault sensor is worse than no label: it sends people to fix the wrong thing.
   service and characteristic UUIDs, the register write convention, and the bootloader
   telegram protocol.
 - **Firmware decompile** — V01.03.00.0022, pulled unencrypted from the vendor's
-  `firmwareHybrid` endpoint, decompiled with Ghidra and annotated with the STM32F072
-  CMSIS-SVD. Source of the actuator-fault bit, the fault-snapshot behaviour, and the
-  BLE-module-over-USART1 architecture. Target: STM32F072 (Cortex-M0), flash at
-  `0x08000000`, 16 KB SRAM, 60 KB image, 122 functions.
+  `firmwareHybrid` endpoint, decompiled with Ghidra and cross-checked by direct Thumb-2
+  disassembly to resolve the literal-pool pointers the decompiler leaves anonymous. That
+  resolution is what makes the status words readable: with `0x20001E58` identified as the
+  status block, every `orr`/`bic` against `+0x14`/`+0x16`/`+0x18` can be enumerated and
+  attributed. Source of the bit maps (§3.1–§3.3), the interlock semantics, the
+  reached-bit rule (§3.1.1), the fault-code table (§3.2.1), the history layout (§3.5) and the
+  front-panel effects (§3.6). Target: **STM32L4 (Cortex-M4)**, application flashed at
+  `0x08000000`, 60 KB image, 293 functions recovered.
+  The image references code and data at `0x08014000`+ that it does not contain — the
+  bootloader region — so a few things (including whatever sets PRJSTAT1 bit 14) are not
+  answerable from it.
 - **Live observation** on a Volcano Hybrid running V01.03 — the three-state heat cycle in
   §3.1, the tolerance-band and cooldown measurements in §3.1.1, and every bit tagged
   CONFIRMED (live).
