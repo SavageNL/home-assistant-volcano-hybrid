@@ -392,18 +392,34 @@ pump command characteristics (§2) and leave PRJSTAT1 alone.
 
 ### 3.5 HIST1 / HIST2 — `10100015` / `10100016`
 
-The device's fault log, as **ASCII hex text** — the characters spelling the hex digits, not the
-bytes they spell. CONFIRMED (live): a V01.03 device answered both with 16 bytes that are 16
-printable characters.
+The device's fault log, as **ASCII text** — the characters, not the bytes they spell. CONFIRMED
+(live): a V01.03 device answered both with 16 bytes that are 16 printable characters.
 
 | Characteristic | Bytes on the wire | Decoded as text |
 |---|---|---|
 | `10100015` | `36313631363136313631363137323631` | `6161616161617261` |
 | `10100016` | `30303030303030303030303030303030` | `0000000000000000` |
 
-A client that hexes the raw bytes therefore reports the value encoded twice; take the text. What
-those two values *mean* is a separate question and is not settled — see below and §7.
+A client that hexes the raw bytes therefore reports the value encoded twice; take the text.
 
+**Read the text as eight two-character decimal fields**, each one a fault code from §3.2.1 —
+which lists every code as hex with its decimal in brackets, and the log spells the decimal. `00`
+is an empty slot, not a code. The two readings above decode as:
+
+| Text | Fields | Meaning |
+|---|---|---|
+| `6161616161617261` | `61 61 61 61 61 61 72 61` | seven × `0x3D` heater regulation timing fault (the one that raises PRJSTAT1 bit 4), one × `0x48` heater feedback deviation |
+| `0000000000000000` | `00 00 00 00 00 00 00 00` | eight empty slots — nothing logged |
+
+The **encoding and the field rule** are CONFIRMED (live), and the argument is that two different
+readings both land on documented values under this rule while neither does under the byte
+reading. Under the field rule, `61` and `72` are `0x3D` and `0x48`, both in §3.2.1, and `00` is
+the empty slot; read instead as hex bytes, the same characters are `0x61` and `0x72`, which
+appear in no table at all, and the second value would be eight `0x30` bytes, which is not a code
+either. One value fitting could be a coincidence; two distinct ones fitting, where the
+alternative fits neither, is not.
+
+What the two characteristics *are* is a separate question and is still open — see below and §7.
 The firmware maintains the log in two parts (STRONG — the two logging routines and all of their
 callers):
 
@@ -411,23 +427,23 @@ callers):
 - a **per-code counter array**, saturating at `0xfff0`, holding how many times each code has
   occurred.
 
-Codes are listed in §3.2.1. Decode an entry by splitting the hex into bytes and looking each one
-up in that table. Neither structure holds a timestamp or a captured temperature, so the log
-gives what failed and how often, never when or at what temperature.
+Neither structure holds a timestamp or a captured temperature, so the log gives what failed and
+how often, never when or at what temperature.
 
-Which characteristic carries the ring and which the counters needs a device with a non-empty log
-to settle (§7), and **the one live reading above does not fit either structure cleanly**. Sixteen
-hex characters are eight bytes, `61 61 61 61 61 61 72 61` — not the 16 code bytes a 16-entry ring
-needs, nor the eight 16-bit counters a saturating array of them would be; and no byte in it
-appears in the code table of §3.2.1 (97 and 114 are not codes). Read as ASCII the same bytes
-spell `aaaaaara`, which is suggestive of something other than codes but is not evidence of
-anything. The device it came from has no fault history worth speaking of, so this may equally be
-what an empty or initialised log looks like. Nothing here should be read as decoding the
-contents. §7 item 3.
+Two cautions about reading more into this than the wire supports:
+
+- **The log as served is eight entries deep**, not the sixteen the ring buffer was read as
+  holding. Sixteen characters are eight fields, and the count of *entries* is what a client can
+  see; whether the buffer behind the characteristic is longer and this is a window onto it is not
+  visible from the wire. Take 8 as the depth on this firmware.
+- **Most-recent-first is the firmware reading, not an observation.** The order of the fields as
+  served has not been checked against a device where the sequence of faults was known, so a
+  client presenting "most recent" is repeating this document's claim, not a measurement.
 
 The vendor app reads both and shows them as raw hex in the report it asks users to send to
-support; this integration exposes them verbatim as diagnostic sensors and in the downloadable
-diagnostics.
+support. This integration exposes both verbatim as diagnostic sensors and in the downloadable
+diagnostics, and decodes them into a *Last fault* sensor that reports the first entry of
+`10100015` with the whole decode in its attributes — raw text included, empty slots and all.
 
 ### 3.6 The front panel can change these registers too
 
@@ -620,13 +636,16 @@ What is still undecoded, in the order it is worth attacking:
 2. **PRJSTAT1 bit 14.** Read as a pump inhibit, written by nothing in the application image.
    Either it comes from the bootloader-resident region or it is dead. Worth watching, not
    worth labelling.
-3. **What HIST1 and HIST2 actually hold.** Their *encoding* is settled (ASCII hex text, §3.5),
-   but not their contents. Which one is the 16-entry ring and which the per-code counters is
-   still open — and the one device read so far answered `6161616161617261` and
-   `0000000000000000`, eight bytes each, which is neither the length nor the byte values either
-   structure predicts (§3.5). So the reading to settle is not only *which is which*: it is
-   whether these characteristics carry the two structures the firmware maintains at all, or a
-   window onto them. A device with a real fault history is what decides it.
+3. **What HIST1 and HIST2 actually hold.** Both the encoding and the field rule are settled
+   (ASCII text, eight two-digit decimal fields, each a §3.2.1 code — §3.5), so the codes in a log
+   can now be read. Two things about the log are not settled. **Which characteristic is the ring
+   and which the per-code counters**: the one device read so far had codes in `10100015` and
+   nothing but empty slots in `10100016`, which is what an unused counter array and an unused
+   ring look like alike — and a counter saturating at `0xfff0` does not fit a two-digit decimal
+   field, so if `10100016` is the counters they are not served verbatim. And **whether the order
+   really is most recent first**, which is how the firmware maintains the ring but has never been
+   checked against a device where the sequence of faults was known. Both are settled by one
+   reading: a device with a real fault history, logged as it happens.
 4. **The undecoded host-settable flags**: PRJSTAT2 bit 8, and the purpose of the hardware line
    PRJSTAT3 bit 0 gates.
 5. **`10100003`**, which is a second copy of the application version string rather than a
@@ -647,8 +666,8 @@ What is still undecoded, in the order it is worth attacking:
    writes to the pump (§9).
 
 Items 1, 3, 4 and 6–9 are settled by observation rather than more decompiling. Enable the *Status
-register 1/2/3* and *Error history 1/2* diagnostic sensors, then when a real fault occurs —
-the device shows an error, or the *Prv1 error* / *Prv2 error* sensors turn on — record:
+register 1/2/3*, *Error history 1/2* and *Last fault* diagnostic sensors, then when a real fault
+occurs — the device shows an error, or the *Prv1 error* / *Prv2 error* sensors turn on — record:
 
 - which bit inside the `ERR` mask is set (`0x4018` for PRJSTAT1, `0x003b` for PRJSTAT2),
 - what the device was doing (heating, pumping, idle, just switched on),

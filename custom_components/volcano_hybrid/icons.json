@@ -63,6 +63,9 @@
       },
       "hist2": {
         "default": "mdi:history"
+      },
+      "last_fault": {
+        "default": "mdi:alert-circle-outline"
       }
     },
     "switch": {

@@ -51,3 +51,4 @@ class VolcanoSensor(StrEnum):
     PRJ5 = "prj5"
     HIST1 = "hist1"
     HIST2 = "hist2"
+    LAST_FAULT = "last_fault"

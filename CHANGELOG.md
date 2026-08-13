@@ -43,6 +43,13 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
   fault has to be diagnosed. **Status registers 4 and 5** are read too: they are
   the vaporizer's two remaining status words, which nothing decodes yet and
   which stay empty on a device that does not report them.
+- A **Last fault** diagnostic sensor, disabled by default, naming the newest
+  fault the vaporizer logged instead of leaving it as digits to look up — a
+  temperature sensor fault, a heater feedback problem, and so on. Its
+  attributes hold the rest of the log, decoded and raw, which is what to attach
+  to a bug report. A code the integration does not recognise is reported as
+  *Unrecognised fault code* with the code itself kept in the attributes, rather
+  than being guessed at.
 - A **Mains voltage** diagnostic sensor, disabled by default, showing the mains
   the vaporizer reports it was built for (`230VAC`). The model on the device
   page now comes from the vaporizer itself instead of being assumed — it still

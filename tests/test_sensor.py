@@ -104,6 +104,80 @@ async def test_raw_register_sensors(
         assert state.state == expected, key
 
 
+async def test_last_fault_sensor(
+    hass: HomeAssistant,
+    entity_registry_enabled_by_default: None,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """The newest logged fault is decoded, with the whole log attached."""
+    mock_volcano.connected = True
+    data = mock_volcano.data
+    data.hist1 = "6161616161617261"
+    data.hist2 = "0000000000000000"
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    last_fault = hass.states.get(get_entity_id(hass, "sensor", "last_fault"))
+    assert last_fault is not None
+    # The state is the option key, never English: the name comes from the
+    # translated state block.
+    assert last_fault.state == "heater_timing_bit4"
+    # The raw text of both characteristics survives, empty slots included.
+    assert last_fault.attributes["hist1"] == "6161616161617261"
+    assert last_fault.attributes["hist2"] == "0000000000000000"
+    assert last_fault.attributes["hist2_faults"] == []
+    faults = last_fault.attributes["hist1_faults"]
+    assert len(faults) == 8
+    assert faults[6] == {"code": "72", "fault": "heater_feedback_deviation"}
+
+
+async def test_last_fault_sensor_with_an_unknown_code(
+    hass: HomeAssistant,
+    entity_registry_enabled_by_default: None,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """A code outside the table is still a valid state for the enum sensor."""
+    mock_volcano.connected = True
+    mock_volcano.data.hist1 = "9900000000000000"
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    last_fault = hass.states.get(get_entity_id(hass, "sensor", "last_fault"))
+    assert last_fault is not None
+    assert last_fault.state == "unknown_code"
+    # Which code it was is still recoverable from a screenshot of the entity.
+    assert last_fault.attributes["hist1_faults"] == [
+        {"code": "99", "fault": "unknown_code"}
+    ]
+
+
+async def test_last_fault_sensor_without_a_log(
+    hass: HomeAssistant,
+    entity_registry_enabled_by_default: None,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """An empty log reads as no fault; an unread one reads as unknown."""
+    mock_volcano.connected = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    entity_id = get_entity_id(hass, "sensor", "last_fault")
+    unread = hass.states.get(entity_id)
+    assert unread is not None
+    assert unread.state == STATE_UNKNOWN
+
+    mock_volcano.data.hist1 = "0000000000000000"
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    empty = hass.states.get(entity_id)
+    assert empty is not None
+    assert empty.state == "none"
+
+
 async def test_extra_register_sensors_without_the_characteristics(
     hass: HomeAssistant,
     entity_registry_enabled_by_default: None,

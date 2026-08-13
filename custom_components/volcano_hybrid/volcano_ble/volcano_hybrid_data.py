@@ -9,6 +9,7 @@ from .const import (
     VOLCANO_HYBRID_MAX_TEMP,
     VOLCANO_HYBRID_MIN_TEMP,
 )
+from .fault_log import FAULT_NONE, decode_fault_log
 
 
 class VolcanoHybridDataStatusProvider:
@@ -147,6 +148,35 @@ class VolcanoHybridData:
         if self.current_temp is None:
             return False
         return self.current_temp >= VOLCANO_HYBRID_DISPLAY_OFF_TEMP
+
+    @property
+    def hist1_faults(self) -> list[dict[str, str]]:
+        """The faults the first history characteristic spells out."""
+        return decode_fault_log(self.hist1)
+
+    @property
+    def hist2_faults(self) -> list[dict[str, str]]:
+        """The faults the second history characteristic spells out."""
+        return decode_fault_log(self.hist2)
+
+    @property
+    def last_fault(self) -> str | None:
+        """
+        The most recently logged fault, as a translation key.
+
+        Taken from the first history characteristic, which is the one that
+        answered with codes on the device this was read from. Which of the two
+        holds the ring of codes and which the per-code counters is still open
+        (VOLCANO_BLE_SPEC.md §7), so both are decoded and neither is labelled;
+        this only reports the first entry of the one that looked like a log.
+
+        None until the log has actually been read, so a device that has not
+        been connected to reads as unknown rather than claiming a clean record.
+        """
+        if self.hist1 is None:
+            return None
+        faults = self.hist1_faults
+        return faults[0]["fault"] if faults else FAULT_NONE
 
     def clear_open_writes(self) -> None:
         """Remove all open writes."""

@@ -137,6 +137,24 @@
       },
       "hist2": {
         "name": "Error history 2"
+      },
+      "last_fault": {
+        "name": "Last fault",
+        "state": {
+          "none": "No fault logged",
+          "regulation_pinned_low": "Regulation reading pinned low",
+          "sensor_short": "Temperature sensor short",
+          "sensor_open": "Temperature sensor open",
+          "heater_timing_bit3": "Heater regulation timing fault (bit 3)",
+          "heater_timing_bit4": "Heater regulation timing fault (bit 4)",
+          "regulation_average_high": "Regulation average too high",
+          "regulation_out_of_range": "Regulation value out of range",
+          "comms_timeout": "Heartbeat timeout",
+          "heater_feedback_low": "Heater feedback low",
+          "heater_feedback_high": "Heater feedback high",
+          "heater_feedback_deviation": "Heater feedback deviation",
+          "unknown_code": "Unrecognised fault code"
+        }
       }
     },
     "switch": {

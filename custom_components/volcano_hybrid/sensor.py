@@ -22,7 +22,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import format_register
 from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
 from .entity import VolcanoHybridEntity
-from .volcano_ble import VolcanoSensor
+from .volcano_ble import FAULT_OPTIONS, VolcanoHybridData, VolcanoSensor
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -35,11 +35,32 @@ def _unchanged(value: Any) -> Any:
     return value
 
 
+def _fault_log_attributes(data: VolcanoHybridData) -> dict[str, Any]:
+    """
+    Report the whole fault log next to the entry the state names.
+
+    Both history characteristics are given raw as well as decoded. The raw text
+    keeps the empty `00` slots the decode drops, and it is what a bug report
+    needs about a device whose log this integration reads wrong: it is the only
+    thing here that is the device's own answer rather than an interpretation of
+    it (VOLCANO_BLE_SPEC.md §3.5).
+    """
+    return {
+        "hist1": data.hist1,
+        "hist2": data.hist2,
+        "hist1_faults": data.hist1_faults,
+        "hist2_faults": data.hist2_faults,
+    }
+
+
 @dataclass(frozen=True, kw_only=True)
 class VolcanoSensorEntityDescription(SensorEntityDescription):
     """Describes a Volcano sensor, with how its device value is presented."""
 
     value_fn: Callable[[Any], Any] = _unchanged
+    # Sensors that report more than a single value take the whole data object,
+    # since what belongs in the attributes is rarely what the state is keyed on.
+    attributes_fn: Callable[[VolcanoHybridData], dict[str, Any]] | None = None
 
 
 SENSOR_DESCRIPTIONS: dict[str, VolcanoSensorEntityDescription] = {
@@ -148,6 +169,21 @@ SENSOR_DESCRIPTIONS: dict[str, VolcanoSensorEntityDescription] = {
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
+    # The same log, read instead of copied: the newest code the device logged,
+    # as one of the fault codes the spec recovered from the firmware. An enum
+    # rather than free text, so the state stays a stable key and only the
+    # translation is English — and so a code no table entry covers becomes a
+    # single `unknown_code` state instead of a value Home Assistant would
+    # reject for not being one of the declared options.
+    VolcanoSensor.LAST_FAULT: VolcanoSensorEntityDescription(
+        key=VolcanoSensor.LAST_FAULT,
+        translation_key=VolcanoSensor.LAST_FAULT,
+        device_class=SensorDeviceClass.ENUM,
+        options=FAULT_OPTIONS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        attributes_fn=_fault_log_attributes,
+    ),
 }
 
 
@@ -176,6 +212,7 @@ async def async_setup_entry(
             VolcanoSensorEntity(coordinator, VolcanoSensor.PRJ5),
             VolcanoSensorEntity(coordinator, VolcanoSensor.HIST1),
             VolcanoSensorEntity(coordinator, VolcanoSensor.HIST2),
+            VolcanoSensorEntity(coordinator, VolcanoSensor.LAST_FAULT),
         ]
     )
 
@@ -202,4 +239,6 @@ class VolcanoSensorEntity(VolcanoHybridEntity, SensorEntity):
         self._attr_native_value = self.entity_description.value_fn(
             self.coordinator.data.get(self._key)
         )
+        if (attributes_fn := self.entity_description.attributes_fn) is not None:
+            self._attr_extra_state_attributes = attributes_fn(self.coordinator.data)
         super()._handle_coordinator_update()
