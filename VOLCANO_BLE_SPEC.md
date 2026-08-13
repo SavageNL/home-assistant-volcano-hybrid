@@ -40,9 +40,11 @@ Two facts drive most of the integration's design:
 ### Architecture behind the GATT
 
 The GATT server is served by a **separate BLE module**; the STM32 main controller talks to
-that module over USART1 (STRONG — peripheral map in the firmware decompile). The status
-registers below are the controller's status words as forwarded to the module, which is why
-they read like internal firmware state rather than a designed API.
+that module over **USART3**, with an ASCII telegram protocol whose full command set is in §10
+(STRONG — image; an earlier read of the peripheral map put the module on USART1, which is
+the wired service port and has its own dispatcher). The status registers below are the
+controller's status words as forwarded to the module, which is why they read like internal
+firmware state rather than a designed API.
 
 The three PRJSTAT characteristics are the controller's own 16-bit status words at RAM
 offsets `+0x14`, `+0x16` and `+0x18`, forwarded verbatim — the module does not remap or
@@ -660,10 +662,13 @@ What is still undecoded, in the order it is worth attacking:
 8. **What service `10130000` is.** Eleven read-only characteristics plus one read/write/notify
    at `101300ff`, none of them decoded and none mentioned by the vendor app (§9). Reading them
    on a device and watching whether any move is where this starts.
-9. **Whether `10110004` is the pump-power command.** The firmware has a `G Q <pct>` telegram
-   that sets pump power 0–100 with no gating, and `10110004` is an undecoded read/write/notify
-   characteristic sitting next to the target temperature. Untested — and a wrong guess here
-   writes to the pump (§9).
+9. **Which characteristic, if any, is bound to the `G Q` pump-percent telegram.** The telegram
+   itself is settled: `G Q <pct>` writes config `+0x40`, ungated, 0–100 (§10.5). What is not
+   settled is whether the BLE module binds any characteristic to it. That binding lives in the
+   **radio module's firmware, which is not in the controller image** (§10.6), so this question is
+   not answerable by more work on the controller dump — it needs the module's firmware, or a
+   device to test against. `10110004` is the best positional candidate and its read value argues
+   against it (§10.6); a wrong guess here writes to the pump (§9.2).
 
 Items 1, 3, 4 and 6–9 are settled by observation rather than more decompiling. Enable the *Status
 register 1/2/3*, *Error history 1/2* and *Last fault* diagnostic sensors, then when a real fault
@@ -697,6 +702,11 @@ label on a fault sensor is worse than no label, because it sends people to fix t
   The image references code and data at `0x08014000`+ that it does not contain — the
   bootloader region — so a few things (including whatever sets PRJSTAT1 bit 14) are not
   answerable from it.
+- **Full disassembly of the same image** (`volcano_hybrid_1.3.bin`, Capstone, Thumb-2/M4) —
+  source of the USART telegram command set, both dispatch tables and the passcode-gated
+  commands in §10. It also marks the boundary of what this image can answer: the module's
+  characteristic→telegram bindings live in the radio module's firmware, which is not part of
+  it, so no further work on the controller image settles them (§10.6).
 - **Live observation** on a Volcano Hybrid running V01.03 — the three-state heat cycle in
   §3.1, the tolerance-band and cooldown measurements in §3.1.1, and every bit tagged
   CONFIRMED (live).
@@ -718,7 +728,8 @@ read this as one device's table, not as a specification. CONFIRMED (live) for th
 Characteristics documented elsewhere in this file are named here for orientation only.
 Everything else is listed as **undecoded**: it was served, and nothing more than that is
 claimed. Note in particular that *write* below means only that the characteristic advertises
-the property; §3.7 is what happens when an advertised write is taken at face value.
+the property; §3.7 is what happens when an advertised write is taken at face value, and §10.7
+is what sits behind the ones whose binding nobody has established.
 
 ### 9.1 Service `10100000` — status, identity and history
 
@@ -779,6 +790,12 @@ and a `uint16` percentage is already how LED brightness is carried two character
 Nothing has tested it. It is a guess from position and shape only, and the cost of a wrong guess
 is a write to something that drives the pump.
 
+Two later findings argue against it without settling it (§10.6): the module's characteristic map
+is not an order-preserving projection of the controller's command set, so position carries less
+than it looks like it does; and `10110004` read `0` both idle and with the pump at full speed,
+where anything mirroring `cfg+0x40` should read its factory default of 100. The candidacy stays
+SPECULATIVE and is not to be acted on.
+
 ### 9.3 Service `10130000` — undocumented
 
 Not mentioned anywhere in the vendor web app and not referenced by anything this document
@@ -824,9 +841,193 @@ to set, and that list lines up exactly with which status characteristics adverti
 | PRJSTAT2 | `R` | 7, 8, 9, 10, 12 | `1010000d` | yes |
 | PRJSTAT3 | `I` | 0, 10 | `1010000e` | yes |
 | PRJSTAT4 | `M` | 12 | `1010000f` | yes |
-| PRJSTAT5 | — | none | `10100010` | **no** |
+| PRJSTAT5 | `K` | none | `10100010` | **no** |
 
 Five registers, five matches, including the one negative case. That is strong evidence that
 `1010000f` is PRJSTAT4 and `10100010` is PRJSTAT5 — the ordering assumed in §1 — and it is why
 the properties are worth recording rather than treating as noise. It says nothing about whether
 a write to any of them takes effect: PRJSTAT1 is on this list and §3.7 is what happened.
+
+The telegram column is the `S`-group selector (§10.4). PRJSTAT5's `K` comes from the dispatcher
+rather than from the whitelist, which is why it was blank here before.
+
+---
+
+## 10. Appendix — the controller's telegram command set
+
+A full disassembly of the V01.03 image (`volcano_hybrid_1.3.bin`, Capstone, Thumb-2/M4)
+recovered the controller's complete USART telegram command set. This is the layer *behind* the
+GATT: the BLE module translates characteristic access into these telegrams (§1), so this command
+set is the ceiling on what any characteristic can possibly do. Recording it explains why some
+things are reachable over Bluetooth and others are not, and it is the reference for what must
+never be written — **§10.7 is the safety-critical part of this appendix.**
+
+The tags here follow the table at the head of this document without exception. **Nothing in this
+appendix has been observed on a device**, so nothing in it is CONFIRMED: read straight off the
+disassembled instruction stream at the address given is exactly what STRONG means here, however
+little room for doubt an unambiguous opcode leaves. Addresses are cited throughout so each claim
+can be re-checked, and reasoning *over* the image rather than reading it is marked SPECULATIVE.
+
+### 10.1 Frame format (STRONG — image)
+
+The framer `FUN_0800C4D8` validates a frame of the shape `FE <dst> <src> <len> … FD`. The
+dispatcher then reads fixed fields out of it:
+
+| Offset | Contents |
+|---:|---|
+| 0 | `FE`, start |
+| 1 | destination |
+| 2 | source |
+| 3 | length |
+| 4 | `'R'` (read) or `'W'` (write) |
+| 5 | group letter |
+| 6 | sub-index |
+| 7 | sign / set digit — `'+'`, `'-'`, `'0'` or `'1'` |
+| 8 … `len−2` | numeric payload |
+| `0xa` … `0xd` | four ASCII-hex mask characters |
+| last | `FD`, end |
+
+Numeric write payloads are **ASCII decimal**, accumulated from offset 8 up to `len−2` as
+`v = v * 10 + (c − '0')` (STRONG — image, at `0x0800CBD2`). Replies are an ASCII sign
+followed by a zero-padded decimal.
+
+The four mask characters overlap the numeric payload area. Which of the two a command reads is
+decided by the command, not by the frame — a bit-mask command such as an `S W 'P'` register write
+takes `[0xa..0xd]`, a scalar command such as `G Q` takes the decimal accumulator.
+
+### 10.2 Two dispatchers, and the port difference (STRONG — image)
+
+There are two dispatchers, one per port:
+
+| Dispatcher | Port | Jump table |
+|---|---|---|
+| `FUN_0800A298` | wired USART1 | `0x0800A336` |
+| `FUN_0800C5DC` | BLE USART3 | `0x0800C656` |
+
+Both are `tbh` jump tables indexed by the group letter and both are **alphabetically ordered**.
+Comparing the two tables gives the groups each port accepts:
+
+| | Groups |
+|---|---|
+| Valid over **BLE** | `B C D E F G L M N O S T U V X Z` |
+| **Wired only** — error stub on the BLE port | **`A`, `H`, `P`** |
+| Error stub on both ports | `I J K Q R W Y` |
+
+Stated plainly, because it closes off a question people ask: the **`H` group is live electrical
+telemetry** — four `uint16` that look like voltage, current and power — and it is **not reachable
+over Bluetooth at all**. Anyone hoping to get power metering out of this device over BLE should
+stop here.
+
+(§1 records the controller-to-module link as USART1. The two dispatchers put the module on
+**USART3** and the wired service port on USART1; the earlier reading was of the wrong port.)
+
+Note that a letter can appear at two levels without conflict: `I`, `K`, `P` and `R` are error
+stubs as *group* letters, and the same letters are live *sub-indices* of the `S` group (§10.4).
+
+### 10.3 The command groups (STRONG — image)
+
+Offsets are into the config block at `0x20001658` or the status block at `0x20001E58` (the block
+§8 identifies).
+
+| Group | Sub-indices | What it does | Gate |
+|---|---|---|---|
+| `A` (wired only) | `' '`, `'8'`, `'9'` | keypad-test byte; operation counter | writes need 1989 / 815 |
+| `B` | `' '`, `'1'`, `'9'` | three identity/serial strings, 18-byte ASCII | write needs 815 |
+| `C` | — | control word; **payload `4711` enters the bootloader** | — |
+| `D` | `' '`, `'1'`, `'9'` | packed date/version field (`+0x12`) | write needs 815 |
+| `E` | `'0'`, `'5'` | reads an 8-byte record (`+0xC0` / `+0xC8`); **write zeroes the 16-byte block** | — |
+| `F` | `'0'..'O'` | fault/history ring read, 80 × `uint16` from `+0x20` | **write clears the ring**, needs 1989 |
+| `G` | numerics and letters | pump, timers and the PID block — see §10.5 | mixed |
+| `H` (wired only) | `'0'`, `'1'`, `'9'` | live electrical telemetry, 4 × `uint16` | — |
+| `L` | `'P'`, `'S'` | LED brightness (`cfg+0x42`, 0–100); a 16-bit setting | — |
+| `M`, `N` | `'0'`, `'1'` | 64-bit statistics records (`+0xd0`, `+0xd4`) | write needs 1989 |
+| `O` | many | lifetime hour/minute counters (`+0xe4…+0xf4`), setpoints | writes need 815 or 1989 |
+| `P` (wired only) | `'G'`, `'0/1/2'`, `'C'`, … | serial record in flash; **`'C'` with payload 9000 programs FLASH** | passcode |
+| `S` | `'A'..'X'` | the status-word group — see §10.4 | mixed |
+| `T` | `'T/a/b/A/B/D/I/K/R/S/d/r/s/t'` | temperature and **temperature-sensor calibration** | write needs 1989 |
+| `U` | `'U'` | **ADC / temperature gain calibration** (`+0x18` slope) | needs 1989 |
+| `V` | `'0/1/3/4/5/A/B'` | version and identity strings, including the radio-module id | write needs 815 |
+| `X` | `' '`, `'1'`, `'A'`, `'B'` | 40-character and identity strings | write needs 815 |
+| `Z` | `'a'..'e'` | five 32-bit statistics (`+0x7c…+0x84`) | write needs 815 |
+
+### 10.4 The `S` group in detail (STRONG — image)
+
+`S` is the status-word group: the telegrams behind the PRJSTAT characteristics, and rather more
+besides.
+
+- Reads `'A'..'X'` return the five PRJSTAT words, the model class, and service words.
+- **`S W '0'` with payload 1989 → immediate CPU reset** (SCB `AIRCR` = `0x05FA0004`, at
+  `0x0800B338` / `0x0800D1A4`).
+- `S W '1'..'5'` set pending-work bits 0–5 at `0x200000CA`. **`'5'` with payload 1000 restores
+  factory defaults** — `FUN_080012AE` rewrites the config block and wipes the counters.
+- `S W 'P'/'R'/'I'/'M'/'K'` are the PRJSTAT1/2/3/4/5 bit writes, each against the per-register
+  whitelist already recorded in §9.5. This confirms the selector→word map, including
+  **`'K'` → PRJSTAT5 at `+0x1c`**, which §9.5 could not name.
+- `S W 'q/r/s/t/u/v/x/y'` are direct heat / air / **second-stage** on-off and burn-in
+  enter/leave, gated on actuator state.
+
+### 10.5 `G Q` and `G R` — pump percent and pump step (STRONG — image)
+
+- **`G Q` (`0x51`)** reads and writes **config `+0x40`, the pump power percent**, factory default
+  100. The payload is ASCII decimal **0–100**; anything above 100 is rejected with error 8. It is
+  **ungated** — no passcode, no actuator interlock. The value reads back via `G R Q`. A write also
+  sets the config-changed notify word at `0x2000012C` and flags a pending config-flash save.
+  Write site `0x0800CC92` (`cmp #0x64; bhi`), read site `0x0800CBC0`.
+- **`G R` (`0x52`)** is the direct pump step, writing `0x2000016a` plus a mode byte chosen by band
+  (`0x33` / `0x4b` / `0x64`). It is **gated on PRJSTAT1 bit 12 AND bit 15**; with either clear it
+  returns error 3 and does nothing.
+- `FUN_08008B28` (at `0x08008B52`) selects `cfg+0x40` as the pump source **only while PRJSTAT1
+  bit 15 is clear**. So `G Q`'s value drives the pump in normal mode, and the step value wins in
+  air step mode (§3.1, bit 15).
+
+Both are valid entries in the **BLE** dispatch table, so both are reachable over Bluetooth *if*
+the module binds a characteristic to them.
+
+### 10.6 Why the pump-percent route is nevertheless blocked
+
+A negative result, recorded so the next person does not spend the same time on it.
+
+- **The characteristic→telegram binding lives in the radio module's firmware, which is not in
+  this image.** Nothing in the controller image assigns a GATT handle to any command. The binding
+  can be reasoned about; it cannot be derived from this dump. CONFIRMED (image, as an absence).
+- The tempting inference — that the module's characteristic map is an order-preserving projection
+  of the command set, given that `1010000c…10` are PRJSTAT1…5 with write properties matching the
+  whitelists five for five (§9.5) — **does not hold as a general rule.** Those five are one
+  contiguous native array walked in index order, and their selector letters `P, R, I, M, K` are
+  not alphabetical, not dispatch order and not config-offset order. Checked against the known
+  `10110000` bindings, five different groups appear interleaved by function, and `03`
+  (`cfg+0x44`) precedes `05` (`cfg+0x42`), so it is not offset-ordered either. The map is
+  hand-curated. STRONG.
+- Evidence that pump power may not be exposed at all: `cfg+0x40` defaults to 100, **no
+  characteristic in the observed dump reads 100**, and `10110004` read `0` both idle and with the
+  pump running at full speed. A characteristic mirroring `cfg+0x40` should read 100 on a
+  factory-default unit. STRONG.
+- `10110004` remains the best positional candidate if one exists at all — a writable notify scalar
+  sitting between `03` (`cfg+0x44`) and `05` (`cfg+0x42`), exactly where `cfg+0x40` would belong —
+  but its read value contradicts that. SPECULATIVE, and explicitly not to be acted on.
+
+### 10.7 Commands that must never be written blind
+
+**Never write a characteristic whose binding is unknown, and never sweep writable
+characteristics.** The reason is this list: every one of these commands sits in the same command
+set as the harmless ones, behind bindings nobody outside Storz & Bickel has enumerated. Every
+entry STRONG (image).
+
+| Command | What it does |
+|---|---|
+| `C` + 4711 | **Bootloader entry** — mirrored at GATT `10100011` (§6) |
+| `S W '0'` + 1989 | **Immediate CPU reset** |
+| `S W '5'` + 1000 | **Factory defaults restored** — config block rewritten, counters wiped |
+| `P W 'C'` + 9000 | **FLASH programming** |
+| `T W` / `U W` + 1989 | **Temperature-sensor and ADC calibration overwrite** — silent, and every temperature reading is wrong afterwards |
+| `B` / `D` / `V` / `X` + 815 | **Serial number, article number, date and radio-module identity overwrite** |
+| `F W`, `E W '0'` | **Fault-ring clear and statistics-block zeroing** — the history in §3.5 is destroyed |
+| `S W 'P/R/I/M/K'`, `S W 'q/r/…'` | **Direct actuator forcing** — can leave the heater on |
+
+The passcodes are the tell. **815 (`0x32f`)** and **1989 (`0x7c5`)**, plus the special payloads
+**1000**, **4711** and **9000**: their presence in a write means the command touches identity,
+calibration, flash, DFU or reset. Nothing in normal operation needs any of them.
+
+Two of these are already reachable over the GATT this document describes — `10100011` is the
+`C` + 4711 bootloader unlock (§6), and §3.7 is what a single well-meant write to an advertised
+writable status register actually did.
