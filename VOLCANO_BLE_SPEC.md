@@ -48,9 +48,10 @@ The three PRJSTAT characteristics are the controller's own 16-bit status words a
 offsets `+0x14`, `+0x16` and `+0x18`, forwarded verbatim — the module does not remap or
 renumber the bits. (STRONG — every bit whose meaning was established live is written at the
 matching offset in the firmware.) The controller keeps **five** such words; `1010000f` and
-`10100010` expose the other two. This integration reads both as raw diagnostics (*Status
-register 4* / *5*) without subscribing and without requiring them to exist — no bit in
-either is decoded, and no device has yet been observed serving them at all.
+`10100010` expose the other two. A V01.03 device serves both (CONFIRMED, live — §9), with
+exactly the write properties the firmware's writable-bit whitelist predicts, but no bit in
+either is decoded. This integration reads both as raw diagnostics (*Status register 4* /
+*5*) without subscribing and without requiring them to exist.
 
 The main controller is an **STM32L4 (Cortex-M4)**, specifically the L4x2/L4x3 line: the image
 uses Thumb-2 instructions (`strd`, `tbb`, `cbz`, register-shifted loads), carries a
@@ -150,11 +151,11 @@ A `setting − countdown` derivation is therefore valid for this pair.
 | `10100004` | BLE-module firmware version | ASCII string | The version of the BLE module, not the main controller. CONFIRMED |
 | `10100005` | Firmware version | ASCII string, e.g. `V01.03` | The application firmware of the main controller. This is the version that tracks Storz & Bickel's published releases. CONFIRMED |
 | `10100008` | Serial number | ASCII string, space-padded | CONFIRMED |
-| `1010000c` | **PRJSTAT1** | `uint16` bit field | Read + **notify**. Live device state: heater, pump, ready, faults. §3.1 |
+| `1010000c` | **PRJSTAT1** | `uint16` bit field | Read + **notify** + write. Live device state: heater, pump, ready, faults. Writable at the GATT layer, but the §3.4 convention does not take on it and writing it can switch the pump off — **do not write it** (§3.7). §3.1 |
 | `1010000d` | **PRJSTAT2** | `uint16` bit field | Read + **notify** + write (see §3.4). Display settings and a second error group. §3.2 |
 | `1010000e` | **PRJSTAT3** | `uint16` bit field | Read + **notify** + write (see §3.4). Vibration setting. §3.3 |
-| `1010000f` | **PRJSTAT4** | `uint16` bit field | The controller's fourth status word (§1). No bit decoded; read once, not subscribed, and its absence is tolerated. SPECULATIVE |
-| `10100010` | **PRJSTAT5** | `uint16` bit field | The fifth status word, on the same terms. SPECULATIVE |
+| `1010000f` | **PRJSTAT4** | `uint16` bit field | The controller's fourth status word (§1). Served as read/write + notify (CONFIRMED, live — §9); identification as PRJSTAT4 STRONG. No bit decoded; read once, not subscribed, and its absence is tolerated |
+| `10100010` | **PRJSTAT5** | `uint16` bit field | The fifth status word, on the same terms — but served read + **notify** only, matching the one register for which the firmware's whitelist has no writable bits (§9). Identification STRONG, contents undecoded |
 | `10100011` | Code number | `uint16` write | Writing `4711` unlocks entry into the bootloader. Not touched by this integration. CONFIRMED (vendor app) |
 | `10100015` | **HIST1** | ASCII hex text | Fault log — recent fault codes and/or per-code counts. §3.5 |
 | `10100016` | **HIST2** | ASCII hex text | The other half of the fault log. §3.5 |
@@ -179,7 +180,7 @@ change is pushed.
 | 12 | `0x1000` | Pump/fan **requested** | STRONG |
 | 13 | `0x2000` | Pump/fan FET enabled (`PUMPE_FET_ENABLE`) — set while bit 12 is set and no pump fault is latched | CONFIRMED |
 | 14 | `0x4000` | **Pump interlock fault** — read as a pump inhibit, but *never written* by the application firmware (see below) | STRONG |
-| 15 | `0x8000` | Air step mode — makes the physical AIR button cycle the pump 100 % → 75 % → 50 % → off instead of toggling. Host-settable | STRONG |
+| 15 | `0x8000` | Air step mode — makes the physical AIR button cycle the pump 100 % → 75 % → 50 % → off instead of toggling. Host-settable, but no way to set it has been found: a §3.4 mask write does not latch it (§3.7) | STRONG |
 | — | `0x4018` | `ERR` — the OR of bits 3, 4 and 14 | CONFIRMED |
 
 The `0x4018` bits are the actuator interlocks. Two functions run every control pass and decide
@@ -381,8 +382,11 @@ So `0x00000200` sets the Fahrenheit bit and `0x00010200` clears it. Bit 16 of th
 word is the set/clear selector; the low 16 bits are the mask. CONFIRMED (vendor app; this
 is what the integration's Celsius, display-on-cooling and vibration switches do).
 
-PRJSTAT1 is not written this way — the heater and pump have their own command
-characteristics (§2).
+**PRJSTAT1 does not accept this convention**, and that is a measured result rather than a
+property of the characteristic: `1010000c` advertises write like the other two (§9), and the
+firmware's telegram handler does list PRJSTAT1 bits 7, 8 and 15 as host-settable. A set-mask
+write to it nevertheless fails to latch, and has a side effect — see §3.7. Use the heater and
+pump command characteristics (§2) and leave PRJSTAT1 alone.
 
 ### 3.5 HIST1 / HIST2 — `10100015` / `10100016`
 
@@ -423,6 +427,42 @@ that drives itself to maximum temperature for ten minutes — surface it rather 
 
 PRJSTAT2 bit 10 arms a production keypad test, which requires all five keys to be pressed once
 each. The panel has a fifth key that does nothing in normal operation.
+
+### 3.7 Writing PRJSTAT1 — a recorded negative result
+
+This is written up so nobody repeats it. The attempt was to turn on air step mode (PRJSTAT1
+bit 15, §3.1) from a client by writing the §3.4 set-mask word — 4-byte little-endian
+`0x00008000` — to `1010000c`. Every write was accepted at the ATT layer: `write_gatt_char`
+returned without raising in all three runs. Nothing about the outcome was visible from the
+write alone.
+
+Three runs on one V01.03 device (CONFIRMED, live):
+
+| Run | State before | PRJSTAT1 before | Read-back delay | PRJSTAT1 read back | Durable outcome |
+|---|---|---|---|---|---|
+| 1 | pump on, heater off | `0x3000` | ~0.61 s | `0x0000` | pump **stopped**, confirmed by the device (fan state went off with no pending write) |
+| 2 | pump on 88 s, heater off | `0x3000` | ~0.61 s | `0x0000` | pump **stopped** again |
+| 3 | heater on, pump off | `0x0623` | ~0.19 s | `0x8000` | register reverted to `0x0623` within ~0.3 s; **heater kept running**; bit 15 not retained |
+
+What the runs establish:
+
+- **The write reaches the controller and has a real effect.** The pump stopped within a second
+  of the write, twice, with the device itself reporting the off state. It had been running 48 s
+  and 88 s respectively, so no fixed timeout explains it. CONFIRMED (live).
+- **Bit 15 does not latch.** Run 3 read the register back as the written word and then watched
+  it revert to its true value with the heater still on. CONFIRMED (live).
+- The explanation that fits all three runs is that the write briefly forces PRJSTAT1 to the
+  written word, and the control loop then re-derives the register from its own internal state on
+  the next pass. That re-asserts the heater's bits (run 3) but not the pump's, because the pump
+  FET follows bit 13 directly, so the forced clear of bits 12 and 13 is taken as a genuine
+  pump-off (runs 1 and 2). SPECULATIVE — it fits the data and has not been checked against the
+  firmware.
+
+For a client the conclusion is flat: **the §3.4 set/clear convention does not work on PRJSTAT1,
+and writing to PRJSTAT1 can switch the pump off.** Do not write it. CONFIRMED.
+
+The three bits the firmware's whitelist marks host-settable on PRJSTAT1 are 7, 8 and 15 (§9);
+only bit 15 was tried. Whatever path does reach them, it is not this one.
 
 ---
 
@@ -563,12 +603,21 @@ What is still undecoded, in the order it is worth attacking:
 5. **`10100003`**, which is a second copy of the application version string rather than a
    distinct identity — but which telegram backs it is decided in the BLE module, not the
    controller.
-6. **PRJSTAT4 and PRJSTAT5** (`1010000f` / `10100010`) — whether the BLE module serves them at
-   all, and what the controller's other two status words carry. Enable the *Status register
-   4/5* diagnostic sensors: anything other than *unknown* settles the first half of that, and
-   watching them across a heat cycle starts on the second.
+6. **PRJSTAT4 and PRJSTAT5** (`1010000f` / `10100010`) — what the controller's other two status
+   words carry. That the module serves them is now settled (§9), so the *Status register 4/5*
+   diagnostic sensors do report a value; watching them across a heat cycle is the next step.
+7. **How to latch PRJSTAT1 bit 15**, and the other two bits its whitelist marks host-settable.
+   The controller plainly supports the telegram, but the §3.4 mask write does not take (§3.7).
+   Whatever the vendor app does to reach these bits, it is something else.
+8. **What service `10130000` is.** Eleven read-only characteristics plus one read/write/notify
+   at `101300ff`, none of them decoded and none mentioned by the vendor app (§9). Reading them
+   on a device and watching whether any move is where this starts.
+9. **Whether `10110004` is the pump-power command.** The firmware has a `G Q <pct>` telegram
+   that sets pump power 0–100 with no gating, and `10110004` is an undecoded read/write/notify
+   characteristic sitting next to the target temperature. Untested — and a wrong guess here
+   writes to the pump (§9).
 
-Items 1, 3, 4 and 6 are settled by observation rather than more decompiling. Enable the *Status
+Items 1, 3, 4 and 6–9 are settled by observation rather than more decompiling. Enable the *Status
 register 1/2/3* and *Error history 1/2* diagnostic sensors, then when a real fault occurs —
 the device shows an error, or the *Prv1 error* / *Prv2 error* sensors turn on — record:
 
@@ -608,3 +657,128 @@ Related documentation in this repository: [`README.md`](README.md) for the entit
 protocol is exposed as, [`CLAUDE.md`](CLAUDE.md) for the architecture of the integration
 itself, and the downloadable diagnostics (**Settings → Devices & services → Volcano
 Hybrid → Download diagnostics**) for a snapshot of all of the above from a running device.
+
+---
+
+## 9. Appendix — the GATT table as observed
+
+Enumerated with `bleak` (`char.properties`) from **one** Volcano Hybrid running V01.03; the
+handles are from that enumeration. The GATT server belongs to the BLE module, not the
+controller (§1), so another module revision may serve a different set or different properties —
+read this as one device's table, not as a specification. CONFIRMED (live) for that device.
+
+Characteristics documented elsewhere in this file are named here for orientation only.
+Everything else is listed as **undecoded**: it was served, and nothing more than that is
+claimed. Note in particular that *write* below means only that the characteristic advertises
+the property; §3.7 is what happens when an advertised write is taken at face value.
+
+### 9.1 Service `10100000` — status, identity and history
+
+| Characteristic | Handle | Properties | Documented as |
+|---|---:|---|---|
+| `10100001` | 21 | read | Bootloader version (§3) |
+| `10100002` | 23 | read | undecoded |
+| `10100003` | 25 | read | Firmware string (§3) |
+| `10100004` | 27 | read | BLE-module firmware version (§3) |
+| `10100005` | 29 | read | Firmware version (§3) |
+| `10100006` | 31 | read, write | undecoded |
+| `10100007` | 33 | read, write | undecoded |
+| `10100008` | 35 | read, write | Serial number (§3) |
+| `10100009` | 37 | read, write | undecoded |
+| `1010000a` | 39 | read, write | undecoded |
+| `1010000b` | 41 | read | undecoded |
+| `1010000c` | 43 | read, write, notify | **PRJSTAT1** (§3.1) — writable, but see §3.7 |
+| `1010000d` | 46 | read, write, notify | **PRJSTAT2** (§3.2) |
+| `1010000e` | 49 | read, write, notify | **PRJSTAT3** (§3.3) |
+| `1010000f` | 52 | read, write, notify | **PRJSTAT4** (§1) |
+| `10100010` | 55 | read, notify | **PRJSTAT5** (§1) |
+| `10100011` | 58 | read, write | Code number — `4711` unlocks the bootloader (§6) |
+| `10100012` | 60 | read, write | undecoded |
+| `10100013` | 62 | read, write | undecoded |
+| `10100014` | 64 | read, write | undecoded |
+| `10100015` | 66 | read | **HIST1** (§3.5) |
+| `10100016` | 68 | read | **HIST2** (§3.5) |
+
+### 9.2 Service `10110000` — control and settings
+
+| Characteristic | Handle | Properties | Documented as |
+|---|---:|---|---|
+| `10110001` | 71 | read, notify | Current temperature (§2) |
+| `10110002` | 74 | read | undecoded |
+| `10110003` | 76 | read, write, notify | Target temperature (§2) |
+| `10110004` | 79 | read, write, notify | undecoded — pump-power candidate, see below |
+| `10110005` | 82 | read, write | LED brightness (§2) |
+| `1011000c` | 84 | read, notify | Auto-off countdown, session timer (§2) |
+| `1011000d` | 87 | read, write | Auto-off setting (§2) |
+| `1011000e` | 89 | read, notify | undecoded |
+| `1011000f` | 92 | read, write | Heater **on** (§2) |
+| `10110010` | 94 | read, write | Heater **off** (§2) |
+| `10110011` | 96 | read, write | undecoded |
+| `10110012` | 98 | read, write | undecoded |
+| `10110013` | 100 | read, write | Pump **on** (§2) |
+| `10110014` | 102 | read, write | Pump **off** (§2) |
+| `10110015` | 104 | read, notify | Lifetime heater hours (§2) |
+| `10110016` | 107 | read, notify | Lifetime heater minutes (§2) |
+| `10110017` | 110 | read, notify | undecoded |
+
+`10110006`–`1011000b` are not served at all: the numbering jumps straight from `10110005` to
+`1011000c`.
+
+**`10110004` is a candidate for the pump-power command** (SPECULATIVE). The firmware has a
+`G Q <pct>` telegram that sets pump power to 0–100 % with no gating of any kind, and this is an
+undecoded read/write/notify characteristic sitting immediately after the target temperature —
+and a `uint16` percentage is already how LED brightness is carried two characteristics along.
+Nothing has tested it. It is a guess from position and shape only, and the cost of a wrong guess
+is a write to something that drives the pump.
+
+### 9.3 Service `10130000` — undocumented
+
+Not mentioned anywhere in the vendor web app and not referenced by anything this document
+otherwise describes:
+
+| Characteristic | Handles | Properties |
+|---|---:|---|
+| `10130001` … `1013000b` | 114–134 | read |
+| `101300ff` | 136 | read, write, notify |
+
+Eleven consecutive read-only characteristics and one read/write/notify at the top of the range.
+No content has been read back and nothing is claimed about what the service is for. The shape
+(a block of read-only values plus one control characteristic) is suggestive of a second
+register bank, but that is not evidence — §7 item 8.
+
+### 9.4 Services belonging to the BLE module
+
+Also enumerated, and belonging to the module rather than the controller:
+
+| Service | Characteristic | Properties |
+|---|---|---|
+| `00001801` | — | standard GATT service |
+| `00000001-1989-0108-1234-123456789abc` | `00000003` | read, notify |
+| | `00000002` | write-without-response, write |
+| `01000002-1989-0108-1234-123456789abc` | `01000001` | write, notify |
+
+Note a naming mismatch worth knowing about before anyone follows §6: the vendor app names
+`00000002-1989-0108-1234-123456789abc` as the firmware-update **service**, but on this device
+that UUID enumerates as a **characteristic** of service `00000001-1989-0108-1234-123456789abc`,
+alongside a read/notify characteristic `00000003` — which is the write/notify pair a UART-style
+telegram link needs. Whether §6's naming is shorthand or a mistake is not settled here; nothing
+about the telegram protocol itself changes.
+
+### 9.5 The write properties match the firmware's writable-bit whitelist
+
+The firmware's telegram handler keeps a per-register whitelist of which bits a host is allowed
+to set, and that list lines up exactly with which status characteristics advertise write
+(STRONG):
+
+| Register | Telegram | Writable bits in the firmware | Characteristic | Advertises write |
+|---|---|---|---|:--:|
+| PRJSTAT1 | `P` | 7, 8, 15 | `1010000c` | yes |
+| PRJSTAT2 | `R` | 7, 8, 9, 10, 12 | `1010000d` | yes |
+| PRJSTAT3 | `I` | 0, 10 | `1010000e` | yes |
+| PRJSTAT4 | `M` | 12 | `1010000f` | yes |
+| PRJSTAT5 | — | none | `10100010` | **no** |
+
+Five registers, five matches, including the one negative case. That is strong evidence that
+`1010000f` is PRJSTAT4 and `10100010` is PRJSTAT5 — the ordering assumed in §1 — and it is why
+the properties are worth recording rather than treating as noise. It says nothing about whether
+a write to any of them takes effect: PRJSTAT1 is on this list and §3.7 is what happened.
