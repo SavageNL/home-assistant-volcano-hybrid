@@ -114,6 +114,9 @@
       "connected_addr": {
         "name": "Connected address"
       },
+      "mains_voltage": {
+        "name": "Mains voltage"
+      },
       "prj1": {
         "name": "Status register 1"
       },

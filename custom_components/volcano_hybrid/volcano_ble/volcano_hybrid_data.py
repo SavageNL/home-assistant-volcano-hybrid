@@ -40,6 +40,11 @@ class VolcanoHybridData:
         self._set_temp: int | None = None
 
         self.serial_number: str | None = None
+        # What the device calls itself ("HYBRID") and the mains it was built
+        # for ("230VAC"). Both are fixed identity strings, and both stay None on
+        # a device whose BLE module does not serve them.
+        self.model: str | None = None
+        self.mains_voltage: str | None = None
         self.firmware_version: str | None = None
         self.firmware_ble_version: str | None = None
         self.bootloader_version: str | None = None

@@ -58,6 +58,14 @@ CHARACTERISTIC_BOOTLOADER_VERSION = "10100001-5354-4f52-5a26-4249434b454c"  # 3
 CHARACTERISTIC_FIRMWARE = "10100003-5354-4f52-5a26-4249434b454c"  # 3
 CHARACTERISTIC_HIST1 = "10100015-5354-4f52-5a26-4249434b454c"  # 3
 CHARACTERISTIC_HIST2 = "10100016-5354-4f52-5a26-4249434b454c"  # 3
+# Two fixed identity strings the device names itself with: `HYBRID` and
+# `230VAC` on a V01.03 device (VOLCANO_BLE_SPEC.md §3). Both advertise write —
+# nothing here writes them, since what a device calls itself and what mains it
+# was built for are facts about the hardware, not settings. Read without
+# subscribing, and tolerated as missing: they are served by the BLE module, so
+# another module revision may not offer them.
+CHARACTERISTIC_MAINS_VOLTAGE = "10100006-5354-4f52-5a26-4249434b454c"  # 3
+CHARACTERISTIC_MODEL = "10100007-5354-4f52-5a26-4249434b454c"  # 3
 
 MASK_PRJSTAT1_VOLCANO_ACTUATOR_FAULT = 16
 MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA = 32
@@ -72,6 +80,24 @@ MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA = 512
 MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING = 4096
 MASK_PRJSTAT2_VOLCANO_ERR = 59
 MASK_PRJSTAT3_VOLCANO_VIBRATION = 1024
+
+
+def _decode_ascii(data: bytearray) -> str:
+    """
+    Decode a characteristic the device serves as ASCII text.
+
+    Undecodable bytes fall back to the hex of what was received. This runs
+    inside a read or notification callback, where raising would abort the
+    initial read and take the whole connect down — over an identity or
+    diagnostic string, on a GATT server that belongs to the BLE module rather
+    than the controller, so another module revision answering differently is
+    not far-fetched. Reporting the raw bytes leaves whatever it sent legible in
+    a bug report instead.
+    """
+    try:
+        return data.decode("ascii").strip()
+    except UnicodeDecodeError:
+        return data.hex()
 
 
 class VolcanoBLE(VolcanoHybridDataStatusProvider):
@@ -338,26 +364,15 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         def _parse_prj5v(data: bytearray) -> None:
             self.data.prj5 = int.from_bytes(data, "little")
 
+        # The fault log is ASCII *text* that spells out hex digits: a device
+        # holding the entry `6161616161617261` puts those sixteen characters on
+        # the wire (spec §3.5, CONFIRMED live). Hexing the bytes would encode it
+        # a second time and report `36313631...` instead.
         def _parse_hist1(data: bytearray) -> None:
-            self.data.hist1 = data.hex()
+            self.data.hist1 = _decode_ascii(data)
 
         def _parse_hist2(data: bytearray) -> None:
-            self.data.hist2 = data.hex()
-
-        def _parse_serial_number(data: bytearray) -> None:
-            self.data.serial_number = data.decode("utf-8").strip()
-
-        def _parse_firmware_version(data: bytearray) -> None:
-            self.data.firmware_version = data.decode("utf-8").strip()
-
-        def _parse_firmware_ble_version(data: bytearray) -> None:
-            self.data.firmware_ble_version = data.decode("utf-8").strip()
-
-        def _parse_bootloader_version(data: bytearray) -> None:
-            self.data.bootloader_version = data.decode("utf-8").strip()
-
-        def _parse_firmware(data: bytearray) -> None:
-            self.data.firmware = data.decode("utf-8").strip()
+            self.data.hist2 = _decode_ascii(data)
 
         async def _parse_current_auto_off_time(data: bytearray) -> None:
             self.data.current_auto_off_time = int.from_bytes(data, "little") / 60
@@ -385,33 +400,7 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         await asyncio.gather(
             _async_read_current_temp_and_subscribe(),
             _async_read_set_temp_and_subscribe(),
-            self._async_read_and_subscribe(
-                SERVICE3_UUID,
-                CHARACTERISTIC_SERIAL_NUMBER,
-                _parse_serial_number,
-                subscribe=False,
-            ),
-            self._async_read_and_subscribe(
-                SERVICE3_UUID,
-                CHARACTERISTIC_FIRMWARE_VERSION,
-                _parse_firmware_version,
-                subscribe=False,
-            ),
-            self._async_read_and_subscribe(
-                SERVICE3_UUID,
-                CHARACTERISTIC_FIRMWARE_BLE_VERSION,
-                _parse_firmware_ble_version,
-                subscribe=False,
-            ),
-            self._async_read_and_subscribe(
-                SERVICE3_UUID,
-                CHARACTERISTIC_BOOTLOADER_VERSION,
-                _parse_bootloader_version,
-                subscribe=False,
-            ),
-            self._async_read_and_subscribe(
-                SERVICE3_UUID, CHARACTERISTIC_FIRMWARE, _parse_firmware, subscribe=False
-            ),
+            self._async_read_identity_strings(),
             self._async_read_and_subscribe(
                 SERVICE3_UUID, CHARACTERISTIC_PRJ2V, _parse_prj2v, subscribe=True
             ),
@@ -464,6 +453,74 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
         _LOGGER.debug("Initial characteristics read complete")
         self._after_data_updated()
         self._after_device_updated()
+
+    async def _async_read_identity_strings(self) -> None:
+        """
+        Read the strings that describe the device rather than its state.
+
+        None of them changes while the device is connected, so none is
+        subscribed to. The model and the mains voltage are read optionally: the
+        GATT server belongs to the BLE module rather than the controller, so
+        another module revision may not serve them, and neither is worth
+        failing a connect over.
+        """
+
+        def _parse_serial_number(data: bytearray) -> None:
+            self.data.serial_number = _decode_ascii(data)
+
+        def _parse_model(data: bytearray) -> None:
+            self.data.model = _decode_ascii(data)
+
+        def _parse_mains_voltage(data: bytearray) -> None:
+            self.data.mains_voltage = _decode_ascii(data)
+
+        def _parse_firmware_version(data: bytearray) -> None:
+            self.data.firmware_version = _decode_ascii(data)
+
+        def _parse_firmware_ble_version(data: bytearray) -> None:
+            self.data.firmware_ble_version = _decode_ascii(data)
+
+        def _parse_bootloader_version(data: bytearray) -> None:
+            self.data.bootloader_version = _decode_ascii(data)
+
+        def _parse_firmware(data: bytearray) -> None:
+            self.data.firmware = _decode_ascii(data)
+
+        await asyncio.gather(
+            self._async_read_and_subscribe(
+                SERVICE3_UUID,
+                CHARACTERISTIC_SERIAL_NUMBER,
+                _parse_serial_number,
+                subscribe=False,
+            ),
+            self._async_read_and_subscribe(
+                SERVICE3_UUID,
+                CHARACTERISTIC_FIRMWARE_VERSION,
+                _parse_firmware_version,
+                subscribe=False,
+            ),
+            self._async_read_and_subscribe(
+                SERVICE3_UUID,
+                CHARACTERISTIC_FIRMWARE_BLE_VERSION,
+                _parse_firmware_ble_version,
+                subscribe=False,
+            ),
+            self._async_read_and_subscribe(
+                SERVICE3_UUID,
+                CHARACTERISTIC_BOOTLOADER_VERSION,
+                _parse_bootloader_version,
+                subscribe=False,
+            ),
+            self._async_read_and_subscribe(
+                SERVICE3_UUID, CHARACTERISTIC_FIRMWARE, _parse_firmware, subscribe=False
+            ),
+            self._async_read_optional(
+                SERVICE3_UUID, CHARACTERISTIC_MODEL, _parse_model
+            ),
+            self._async_read_optional(
+                SERVICE3_UUID, CHARACTERISTIC_MAINS_VOLTAGE, _parse_mains_voltage
+            ),
+        )
 
     async def async_set_fan(self, on: bool) -> bool:
         """Set the fan on or off."""

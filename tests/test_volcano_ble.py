@@ -24,6 +24,8 @@ from custom_components.volcano_hybrid.volcano_ble.volcano_ble import (
     CHARACTERISTIC_HIST1,
     CHARACTERISTIC_HIST2,
     CHARACTERISTIC_LED_BRIGHTNESS,
+    CHARACTERISTIC_MAINS_VOLTAGE,
+    CHARACTERISTIC_MODEL,
     CHARACTERISTIC_PRJ1V,
     CHARACTERISTIC_PRJ2V,
     CHARACTERISTIC_PRJ3V,
@@ -163,6 +165,8 @@ def default_values() -> dict[str, bytes]:
         CHARACTERISTIC_PRJ4V: (0x1234).to_bytes(2, "little"),
         CHARACTERISTIC_PRJ5V: (0x5678).to_bytes(2, "little"),
         CHARACTERISTIC_SERIAL_NUMBER: b"VH123456 ",
+        CHARACTERISTIC_MAINS_VOLTAGE: b"230VAC",
+        CHARACTERISTIC_MODEL: b"HYBRID",
         CHARACTERISTIC_FIRMWARE_VERSION: b"V01.23",
         CHARACTERISTIC_FIRMWARE_BLE_VERSION: b"V01.00",
         CHARACTERISTIC_BOOTLOADER_VERSION: b"V00.90",
@@ -172,8 +176,10 @@ def default_values() -> dict[str, bytes]:
         CHARACTERISTIC_HEAT_MINUTES_CHANGED: (30).to_bytes(2, "little"),
         CHARACTERISTIC_SHUT_OFF: (1800).to_bytes(2, "little"),
         CHARACTERISTIC_LED_BRIGHTNESS: (70).to_bytes(2, "little"),
-        CHARACTERISTIC_HIST1: bytes.fromhex("0011223344556677"),
-        CHARACTERISTIC_HIST2: bytes.fromhex("8899aabbccddeeff"),
+        # The fault log as a device serves it: ASCII text spelling out hex
+        # digits, sixteen characters in sixteen bytes.
+        CHARACTERISTIC_HIST1: b"6161616161617261",
+        CHARACTERISTIC_HIST2: b"0000000000000000",
     }
 
 
@@ -216,6 +222,8 @@ async def test_connect_reads_state() -> None:
     assert data.prv2_error is False
     assert data.vibration is True
     assert data.serial_number == "VH123456"
+    assert data.model == "HYBRID"
+    assert data.mains_voltage == "230VAC"
     assert data.firmware_version == "V01.23"
     assert data.current_auto_off_time == 20.0
     assert data.heat_time == 150
@@ -243,8 +251,10 @@ async def test_connect_reads_raw_registers_and_history() -> None:
     assert data.prj3 == 0
     assert data.prj4 == 0x1234
     assert data.prj5 == 0x5678
-    assert data.hist1 == "0011223344556677"
-    assert data.hist2 == "8899aabbccddeeff"
+    # The history is ASCII text, reported as the device wrote it. Hexing the
+    # bytes instead would report "36313631..." — the text encoded twice.
+    assert data.hist1 == "6161616161617261"
+    assert data.hist2 == "0000000000000000"
 
     # History is read once; it is not a push characteristic
     assert CHARACTERISTIC_HIST1 not in client.notify_callbacks
@@ -285,10 +295,56 @@ async def test_connect_without_the_extra_status_registers() -> None:
     assert data.prj1 is not None
     assert data.serial_number == "VH123456"
     assert data.led_brightness == 70
-    assert data.hist2 == "8899aabbccddeeff"
+    assert data.hist2 == "0000000000000000"
     assert device_updates
     assert CHARACTERISTIC_CURRENT_TEMP in client.notify_callbacks
     assert CHARACTERISTIC_PRJ1V in client.notify_callbacks
+
+
+async def test_connect_without_the_identity_strings() -> None:
+    """A device that does not serve model/mains voltage still connects."""
+    values = default_values()
+    del values[CHARACTERISTIC_MAINS_VOLTAGE]
+    del values[CHARACTERISTIC_MODEL]
+    client = FakeBleakClient(
+        values, missing={CHARACTERISTIC_MAINS_VOLTAGE, CHARACTERISTIC_MODEL}
+    )
+    volcano, _, device_updates = await connect(client)
+
+    assert volcano.is_connected
+    data = volcano.data
+    assert data.model is None
+    assert data.mains_voltage is None
+
+    # The identity the device does report is unaffected.
+    assert data.serial_number == "VH123456"
+    assert data.firmware_version == "V01.23"
+    assert device_updates
+
+    # Neither is subscribed to: they are fixed strings, not state.
+    assert CHARACTERISTIC_MAINS_VOLTAGE not in client.notify_callbacks
+    assert CHARACTERISTIC_MODEL not in client.notify_callbacks
+
+    # And nothing writes them, even though both advertise write.
+    assert client.written == []
+
+
+async def test_undecodable_text_falls_back_to_hex() -> None:
+    """
+    Bytes that are not ASCII are reported as hex instead of raising.
+
+    The parsing runs inside the initial read, so an exception there would abort
+    the connect entirely — over a diagnostic string.
+    """
+    values = default_values()
+    values[CHARACTERISTIC_HIST1] = bytes.fromhex("00ff11223344556677")
+    client = FakeBleakClient(values)
+    volcano, _, _ = await connect(client)
+
+    assert volcano.is_connected
+    assert volcano.data.hist1 == "00ff11223344556677"
+    # The characteristics that did decode are unaffected.
+    assert volcano.data.hist2 == "0000000000000000"
 
 
 async def test_prj1_notification_updates_raw_register() -> None:

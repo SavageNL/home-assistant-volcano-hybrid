@@ -35,6 +35,29 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# The model shown until the device reports its own. Not only a placeholder: a
+# device that has never connected, or whose BLE module does not serve the model
+# characteristic, keeps this.
+DEFAULT_MODEL = "Volcano Hybrid"
+
+
+def _model_name(reported: str | None) -> str:
+    """
+    Render the model the device reports as the name people know it by.
+
+    The device answers a bare product class — `HYBRID` on the unit this was
+    read from, and the firmware seeds that from a model class that also has a
+    Medic variant. Shown verbatim it would replace the "Volcano Hybrid" the
+    device registry has always displayed with a shoutier version of the same
+    fact, so the class is titled and prefixed instead: `HYBRID` renders exactly
+    what was there before, while a different class still reads correctly.
+    Anything that is not a plain word is left alone rather than dressed up.
+    """
+    if not reported or not reported.isalpha():
+        return DEFAULT_MODEL
+    return f"Volcano {reported.capitalize()}"
+
+
 type VolcanoHybridConfigEntry = ConfigEntry[VolcanoHybridCoordinator]
 
 
@@ -63,7 +86,7 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
             identifiers={(DOMAIN, address)},
             name="Volcano Hybrid",
             manufacturer="Storz & Bickel",
-            model="Volcano Hybrid",
+            model=DEFAULT_MODEL,
             connections={(CONNECTION_BLUETOOTH, address)},
         )
         self._device = VolcanoBLE(self.async_update_listeners, self.update_device)
@@ -209,6 +232,14 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
 
     def update_device(self) -> None:
         """Update the device registry with the latest data."""
+        # The device names its own model, so use that once it has been read.
+        # device_info is kept in step with the registry so entities added after
+        # this point describe the same device; its identifiers are deliberately
+        # untouched, since they are what the device is keyed by and every
+        # entity's unique id is derived from the address alongside them.
+        model = _model_name(self.data.model)
+        self.device_info["model"] = model
+
         dev_reg = dr.async_get(self.hass)
         device = dev_reg.async_get_device(self.device_info.get("identifiers"))
         if not device:
@@ -216,6 +247,7 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[VolcanoHybridData]):
 
         dev_reg.async_update_device(
             device_id=device.id,
+            model=model,
             serial_number=self.data.serial_number,
             sw_version=self.data.firmware_version,
             hw_version=self.data.bootloader_version,

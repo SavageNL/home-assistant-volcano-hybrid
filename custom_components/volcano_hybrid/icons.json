@@ -40,6 +40,9 @@
       "heat_time": {
         "default": "mdi:timer"
       },
+      "mains_voltage": {
+        "default": "mdi:power-plug"
+      },
       "prj1": {
         "default": "mdi:chip"
       },

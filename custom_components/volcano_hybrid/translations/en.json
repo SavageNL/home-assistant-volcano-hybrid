@@ -103,6 +103,9 @@
             "hist2": {
                 "name": "Error history 2"
             },
+            "mains_voltage": {
+                "name": "Mains voltage"
+            },
             "prj1": {
                 "name": "Status register 1"
             },

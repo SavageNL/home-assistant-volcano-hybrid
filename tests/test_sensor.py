@@ -51,6 +51,23 @@ async def test_sensors(
     assert connected_addr.state == "hci0"
 
 
+async def test_mains_voltage_sensor(
+    hass: HomeAssistant,
+    entity_registry_enabled_by_default: None,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """The mains voltage is reported as the string the device serves."""
+    mock_volcano.connected = True
+    mock_volcano.data.mains_voltage = "230VAC"
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    mains_voltage = hass.states.get(get_entity_id(hass, "sensor", "mains_voltage"))
+    assert mains_voltage is not None
+    assert mains_voltage.state == "230VAC"
+
+
 async def test_raw_register_sensors(
     hass: HomeAssistant,
     entity_registry_enabled_by_default: None,
@@ -65,21 +82,22 @@ async def test_raw_register_sensors(
     data.prj3 = 0x1467
     data.prj4 = 0x1234
     data.prj5 = 0x5678
-    data.hist1 = "0011223344556677"
-    data.hist2 = "8899aabbccddeeff"
+    data.hist1 = "6161616161617261"
+    data.hist2 = "0000000000000000"
     mock_volcano.data_updated()
     await hass.async_block_till_done()
 
     # The registers are bit fields, reported as the hex word the bit maps in
-    # VOLCANO_BLE_SPEC.md are written against.
+    # VOLCANO_BLE_SPEC.md are written against; the history is the hex text the
+    # device itself serves, passed through as it came.
     for key, expected in (
         ("prj1", "0x0623"),
         ("prj2", "0x0000"),
         ("prj3", "0x1467"),
         ("prj4", "0x1234"),
         ("prj5", "0x5678"),
-        ("hist1", "0011223344556677"),
-        ("hist2", "8899aabbccddeeff"),
+        ("hist1", "6161616161617261"),
+        ("hist2", "0000000000000000"),
     ):
         state = hass.states.get(get_entity_id(hass, "sensor", key))
         assert state is not None, key

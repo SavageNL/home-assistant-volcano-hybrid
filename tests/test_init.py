@@ -110,6 +110,7 @@ async def test_device_registry_info(
     assert device.serial_number is None
 
     mock_volcano.data.serial_number = "VH123456"
+    mock_volcano.data.model = "HYBRID"
     mock_volcano.data.firmware_version = "V01.23"
     mock_volcano.data.bootloader_version = "V00.90"
     mock_volcano.device_updated()
@@ -118,8 +119,55 @@ async def test_device_registry_info(
     device = device_registry.async_get_device({(DOMAIN, VOLCANO_ADDRESS)})
     assert device is not None
     assert device.serial_number == "VH123456"
+    # The device reports the bare class; it is shown as the product name.
+    assert device.model == "Volcano Hybrid"
     assert device.sw_version == "V01.23"
     assert device.hw_version == "V00.90"
+    # The identifiers key the device; reading its model must not change them.
+    assert device.identifiers == {(DOMAIN, VOLCANO_ADDRESS)}
+
+
+async def test_device_registry_model_fallback(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """A device that never reports a model keeps the integration's own name."""
+    mock_volcano.data.serial_number = "VH123456"
+    mock_volcano.device_updated()
+    await hass.async_block_till_done()
+
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_device({(DOMAIN, VOLCANO_ADDRESS)})
+    assert device is not None
+    assert device.model == "Volcano Hybrid"
+
+
+async def test_device_registry_model_rendering(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """Another model class reads correctly; anything else is left to the name."""
+    device_registry = dr.async_get(hass)
+
+    mock_volcano.data.model = "MEDIC"
+    mock_volcano.device_updated()
+    await hass.async_block_till_done()
+
+    device = device_registry.async_get_device({(DOMAIN, VOLCANO_ADDRESS)})
+    assert device is not None
+    assert device.model == "Volcano Medic"
+
+    # A value that is not a plain word is not a class name, so it is not
+    # dressed up as one.
+    mock_volcano.data.model = "230VAC"
+    mock_volcano.device_updated()
+    await hass.async_block_till_done()
+
+    device = device_registry.async_get_device({(DOMAIN, VOLCANO_ADDRESS)})
+    assert device is not None
+    assert device.model == "Volcano Hybrid"
 
 
 async def test_remove_config_entry_device(

@@ -83,6 +83,15 @@ SENSOR_DESCRIPTIONS: dict[str, VolcanoSensorEntityDescription] = {
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
+    # The mains the device was built for, as it reports it ("230VAC"). A fixed
+    # property of the hardware rather than anything measured, so it carries no
+    # device class or unit — it is a string, not a voltage reading.
+    VolcanoSensor.MAINS_VOLTAGE: VolcanoSensorEntityDescription(
+        key=VolcanoSensor.MAINS_VOLTAGE,
+        translation_key=VolcanoSensor.MAINS_VOLTAGE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
     # The raw status words and the snapshots the device captured at its last
     # fault. They are undecoded on purpose: they carry the bits this
     # integration does not interpret, which is what makes them worth reading
@@ -159,6 +168,7 @@ async def async_setup_entry(
             VolcanoSensorEntity(
                 coordinator, VolcanoSensor.CONNECTED_ADDR, always_available=True
             ),
+            VolcanoSensorEntity(coordinator, VolcanoSensor.MAINS_VOLTAGE),
             VolcanoSensorEntity(coordinator, VolcanoSensor.PRJ1),
             VolcanoSensorEntity(coordinator, VolcanoSensor.PRJ2),
             VolcanoSensorEntity(coordinator, VolcanoSensor.PRJ3),

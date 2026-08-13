@@ -43,10 +43,22 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
   fault has to be diagnosed. **Status registers 4 and 5** are read too: they are
   the vaporizer's two remaining status words, which nothing decodes yet and
   which stay empty on a device that does not report them.
+- A **Mains voltage** diagnostic sensor, disabled by default, showing the mains
+  the vaporizer reports it was built for (`230VAC`). The model on the device
+  page now comes from the vaporizer itself instead of being assumed — it still
+  reads *Volcano Hybrid*, but it is now the device saying so.
 - [`VOLCANO_BLE_SPEC.md`](VOLCANO_BLE_SPEC.md): a full description of the
   Volcano Hybrid's Bluetooth protocol — every characteristic, how its value is
   encoded, what each status-register bit means, and the firmware-update
   protocol this integration deliberately does not implement.
+
+### Fixed
+
+- The **Error history 1/2** sensors showed a double-encoded value. The
+  vaporizer already sends its fault log as text, and the integration encoded
+  that text a second time, so a log reading `6161616161617261` was shown as
+  `36313631363136313631363137323631`. It now shows exactly what the device
+  reports.
 
 ## [1.0.4] - 2026-08-01
 

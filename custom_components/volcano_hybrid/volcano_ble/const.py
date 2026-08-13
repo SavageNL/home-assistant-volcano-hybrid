@@ -43,6 +43,7 @@ class VolcanoSensor(StrEnum):
     CONNECTED = "connected"
     RSSI = "rssi"
     CONNECTED_ADDR = "connected_addr"
+    MAINS_VOLTAGE = "mains_voltage"
     PRJ1 = "prj1"
     PRJ2 = "prj2"
     PRJ3 = "prj3"

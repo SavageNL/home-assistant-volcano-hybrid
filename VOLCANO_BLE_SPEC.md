@@ -150,6 +150,8 @@ A `setting − countdown` derivation is therefore valid for this pair.
 | `10100003` | Firmware string | ASCII string | A second version/identity string. This integration only uses it as a fallback when `10100005` is empty. Exact meaning unconfirmed. SPECULATIVE |
 | `10100004` | BLE-module firmware version | ASCII string | The version of the BLE module, not the main controller. CONFIRMED |
 | `10100005` | Firmware version | ASCII string, e.g. `V01.03` | The application firmware of the main controller. This is the version that tracks Storz & Bickel's published releases. CONFIRMED |
+| `10100006` | Mains voltage | ASCII string | Read back as `230VAC` on a European V01.03 device: the mains the unit was built for. Advertises write (§9); **nothing writes it** — it describes the hardware, not a setting. CONFIRMED (live) |
+| `10100007` | Model | ASCII string | Read back as `HYBRID`: the device's own name for its model class — the same Hybrid/Medic distinction PRJSTAT3 bit 0 is seeded from at boot (§3.3), though nothing ties the two together beyond the name. Advertises write (§9); **nothing writes it**. CONFIRMED (live) |
 | `10100008` | Serial number | ASCII string, space-padded | CONFIRMED |
 | `1010000c` | **PRJSTAT1** | `uint16` bit field | Read + **notify** + write. Live device state: heater, pump, ready, faults. Writable at the GATT layer, but the §3.4 convention does not take on it and writing it can switch the pump off — **do not write it** (§3.7). §3.1 |
 | `1010000d` | **PRJSTAT2** | `uint16` bit field | Read + **notify** + write (see §3.4). Display settings and a second error group. §3.2 |
@@ -157,8 +159,8 @@ A `setting − countdown` derivation is therefore valid for this pair.
 | `1010000f` | **PRJSTAT4** | `uint16` bit field | The controller's fourth status word (§1). Served as read/write + notify (CONFIRMED, live — §9); identification as PRJSTAT4 STRONG. No bit decoded; read once, not subscribed, and its absence is tolerated |
 | `10100010` | **PRJSTAT5** | `uint16` bit field | The fifth status word, on the same terms — but served read + **notify** only, matching the one register for which the firmware's whitelist has no writable bits (§9). Identification STRONG, contents undecoded |
 | `10100011` | Code number | `uint16` write | Writing `4711` unlocks entry into the bootloader. Not touched by this integration. CONFIRMED (vendor app) |
-| `10100015` | **HIST1** | ASCII hex text | Fault log — recent fault codes and/or per-code counts. §3.5 |
-| `10100016` | **HIST2** | ASCII hex text | The other half of the fault log. §3.5 |
+| `10100015` | **HIST1** | ASCII hex text | Fault log — recent fault codes and/or per-code counts. Encoding CONFIRMED (live); contents undecoded. §3.5 |
+| `10100016` | **HIST2** | ASCII hex text | The other half of the fault log, same encoding. §3.5 |
 
 ### 3.1 PRJSTAT1 — `1010000c`
 
@@ -390,8 +392,20 @@ pump command characteristics (§2) and leave PRJSTAT1 alone.
 
 ### 3.5 HIST1 / HIST2 — `10100015` / `10100016`
 
-The device's fault log, as ASCII hex text. The firmware maintains it in two parts (STRONG — the
-two logging routines and all of their callers):
+The device's fault log, as **ASCII hex text** — the characters spelling the hex digits, not the
+bytes they spell. CONFIRMED (live): a V01.03 device answered both with 16 bytes that are 16
+printable characters.
+
+| Characteristic | Bytes on the wire | Decoded as text |
+|---|---|---|
+| `10100015` | `36313631363136313631363137323631` | `6161616161617261` |
+| `10100016` | `30303030303030303030303030303030` | `0000000000000000` |
+
+A client that hexes the raw bytes therefore reports the value encoded twice; take the text. What
+those two values *mean* is a separate question and is not settled — see below and §7.
+
+The firmware maintains the log in two parts (STRONG — the two logging routines and all of their
+callers):
 
 - a **16-entry ring buffer of code bytes**, most recent first; every fault pushes its code;
 - a **per-code counter array**, saturating at `0xfff0`, holding how many times each code has
@@ -402,9 +416,18 @@ up in that table. Neither structure holds a timestamp or a captured temperature,
 gives what failed and how often, never when or at what temperature.
 
 Which characteristic carries the ring and which the counters needs a device with a non-empty log
-to settle (§7). The vendor app reads both and shows them as raw hex in the report it asks users
-to send to support; this integration exposes them verbatim as diagnostic sensors and in the
-downloadable diagnostics.
+to settle (§7), and **the one live reading above does not fit either structure cleanly**. Sixteen
+hex characters are eight bytes, `61 61 61 61 61 61 72 61` — not the 16 code bytes a 16-entry ring
+needs, nor the eight 16-bit counters a saturating array of them would be; and no byte in it
+appears in the code table of §3.2.1 (97 and 114 are not codes). Read as ASCII the same bytes
+spell `aaaaaara`, which is suggestive of something other than codes but is not evidence of
+anything. The device it came from has no fault history worth speaking of, so this may equally be
+what an empty or initialised log looks like. Nothing here should be read as decoding the
+contents. §7 item 3.
+
+The vendor app reads both and shows them as raw hex in the report it asks users to send to
+support; this integration exposes them verbatim as diagnostic sensors and in the downloadable
+diagnostics.
 
 ### 3.6 The front panel can change these registers too
 
@@ -473,7 +496,7 @@ characteristics that push:
 
 | Subscribed (notify) | Read once per connection | Re-read on every 10 s cycle |
 |---|---|---|
-| current temperature, target temperature, PRJSTAT1, PRJSTAT2, PRJSTAT3, auto-off countdown, lifetime hours, lifetime minutes | serial number, all four version strings, auto-off setting, LED brightness, HIST1, HIST2, PRJSTAT4, PRJSTAT5 | current temperature, target temperature, PRJSTAT1 |
+| current temperature, target temperature, PRJSTAT1, PRJSTAT2, PRJSTAT3, auto-off countdown, lifetime hours, lifetime minutes | serial number, model, mains voltage, all four version strings, auto-off setting, LED brightness, HIST1, HIST2, PRJSTAT4, PRJSTAT5 | current temperature, target temperature, PRJSTAT1 |
 
 The 10 s cycle is a fallback, not the update mechanism. Notifications are unacknowledged
 and the device only notifies on *change*, so a single dropped packet while the device holds
@@ -597,7 +620,13 @@ What is still undecoded, in the order it is worth attacking:
 2. **PRJSTAT1 bit 14.** Read as a pump inhibit, written by nothing in the application image.
    Either it comes from the bootloader-resident region or it is dead. Worth watching, not
    worth labelling.
-3. **HIST1 vs HIST2** — which one is the 16-entry ring and which the per-code counters.
+3. **What HIST1 and HIST2 actually hold.** Their *encoding* is settled (ASCII hex text, §3.5),
+   but not their contents. Which one is the 16-entry ring and which the per-code counters is
+   still open — and the one device read so far answered `6161616161617261` and
+   `0000000000000000`, eight bytes each, which is neither the length nor the byte values either
+   structure predicts (§3.5). So the reading to settle is not only *which is which*: it is
+   whether these characteristics carry the two structures the firmware maintains at all, or a
+   window onto them. A device with a real fault history is what decides it.
 4. **The undecoded host-settable flags**: PRJSTAT2 bit 8, and the purpose of the hardware line
    PRJSTAT3 bit 0 gates.
 5. **`10100003`**, which is a second copy of the application version string rather than a
@@ -681,8 +710,8 @@ the property; §3.7 is what happens when an advertised write is taken at face va
 | `10100003` | 25 | read | Firmware string (§3) |
 | `10100004` | 27 | read | BLE-module firmware version (§3) |
 | `10100005` | 29 | read | Firmware version (§3) |
-| `10100006` | 31 | read, write | undecoded |
-| `10100007` | 33 | read, write | undecoded |
+| `10100006` | 31 | read, write | Mains voltage — `230VAC` (§3) |
+| `10100007` | 33 | read, write | Model — `HYBRID` (§3) |
 | `10100008` | 35 | read, write | Serial number (§3) |
 | `10100009` | 37 | read, write | undecoded |
 | `1010000a` | 39 | read, write | undecoded |

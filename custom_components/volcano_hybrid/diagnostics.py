@@ -25,6 +25,10 @@ async def async_get_config_entry_diagnostics(
             "entry_data": dict(entry.data),
             "device": {
                 "serial_number": data.serial_number,
+                # The device's own identity strings, read verbatim: what it
+                # calls itself and which mains it was built for.
+                "model": data.model,
+                "mains_voltage": data.mains_voltage,
                 "firmware": data.firmware,
                 "firmware_version": data.firmware_version,
                 "firmware_ble_version": data.firmware_ble_version,

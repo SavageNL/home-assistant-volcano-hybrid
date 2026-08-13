@@ -26,6 +26,8 @@ async def test_diagnostics(
     mock_volcano.connected = True
     data = mock_volcano.data
     data.serial_number = "VH123456"
+    data.model = "HYBRID"
+    data.mains_voltage = "230VAC"
     data.firmware_version = "V01.23"
     data.current_temp = 185
     data.set_temp = 190
@@ -42,6 +44,9 @@ async def test_diagnostics(
     assert diagnostics["connection"]["connected_addr"] == REDACTED
 
     assert diagnostics["device"]["firmware_version"] == "V01.23"
+    # The device's own identity strings, not the fallbacks the registry shows.
+    assert diagnostics["device"]["model"] == "HYBRID"
+    assert diagnostics["device"]["mains_voltage"] == "230VAC"
     assert diagnostics["connection"]["connected"] is True
     assert diagnostics["connection"]["rssi"] == -60
     assert diagnostics["state"]["current_temp"] == 185
@@ -66,8 +71,8 @@ async def test_diagnostics_include_raw_registers_and_history(
     data.prj3 = 0x0400
     data.prj4 = 0x1234
     data.prj5 = 0x5678
-    data.hist1 = "0011223344556677"
-    data.hist2 = "8899aabbccddeeff"
+    data.hist1 = "6161616161617261"
+    data.hist2 = "0000000000000000"
 
     diagnostics = await async_get_config_entry_diagnostics(hass, init_integration)
 
@@ -77,8 +82,8 @@ async def test_diagnostics_include_raw_registers_and_history(
     assert registers["prj3"] == "0x0400"
     assert registers["prj4"] == "0x1234"
     assert registers["prj5"] == "0x5678"
-    assert registers["hist1"] == "0011223344556677"
-    assert registers["hist2"] == "8899aabbccddeeff"
+    assert registers["hist1"] == "6161616161617261"
+    assert registers["hist2"] == "0000000000000000"
 
 
 async def test_diagnostics_registers_before_connect(
