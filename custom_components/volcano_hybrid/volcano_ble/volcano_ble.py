@@ -69,11 +69,9 @@ CHARACTERISTIC_MODEL = "10100007-5354-4f52-5a26-4249434b454c"  # 3
 
 MASK_PRJSTAT1_VOLCANO_ACTUATOR_FAULT = 16
 MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA = 32
-MASK_PRJSTAT1_VOLCANO_SECOND_STAGE = 64
 MASK_PRJSTAT1_VOLCANO_ENABLE_AUTOBLESHUTDOWN = 512
 MASK_PRJSTAT1_VOLCANO_TEMPERATURE_REACHED = 1024
 MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE = 8192
-MASK_PRJSTAT1_VOLCANO_AIR_STEP_MODE = 32768
 MASK_PRJSTAT1_VOLCANO_ERR = 16408
 MASK_PRJSTAT2_VOLCANO_SERVICE_MODE = 64
 MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA = 512
@@ -310,13 +308,6 @@ class VolcanoBLE(VolcanoHybridDataStatusProvider):
             self.data.actuator_fault = bool(
                 prj1v & MASK_PRJSTAT1_VOLCANO_ACTUATOR_FAULT
             )
-            # Bit 6: the second temperature stage ("boost"), which adds a
-            # configurable offset to the target. Host-settable only — no
-            # front-panel key reaches it (spec §3.1, STRONG).
-            self.data.second_stage = bool(prj1v & MASK_PRJSTAT1_VOLCANO_SECOND_STAGE)
-            # Bit 15: makes the physical AIR button step the pump
-            # 100/75/50/off instead of toggling it (spec §3.1/§3.6, STRONG).
-            self.data.air_step_mode = bool(prj1v & MASK_PRJSTAT1_VOLCANO_AIR_STEP_MODE)
             self.data.prv1_error = bool(prj1v & MASK_PRJSTAT1_VOLCANO_ERR)
 
         await self._async_read_and_subscribe(

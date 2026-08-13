@@ -78,8 +78,6 @@ class VolcanoHybridData:
         # the current temperature against the target to know it is ready.
         self.at_temperature: bool | None = None
         self.actuator_fault: bool | None = None
-        self.second_stage: bool | None = None
-        self.air_step_mode: bool | None = None
         self.prv1_error: bool | None = None
 
         # Prv2 attributes

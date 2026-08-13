@@ -53,8 +53,6 @@ async def async_get_config_entry_diagnostics(
                 "is_cooling": data.is_cooling,
                 "auto_shutdown": data.auto_shutdown,
                 "actuator_fault": data.actuator_fault,
-                "second_stage": data.second_stage,
-                "air_step_mode": data.air_step_mode,
                 "service_mode": data.service_mode,
                 "prv1_error": data.prv1_error,
                 "prv2_error": data.prv2_error,

@@ -21,9 +21,9 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
   temperature. This is the device's own signal rather than a comparison of the
   current temperature against the target — the same one that drives its
   vibration alert, so it turns on exactly when the Volcano says it is ready. It
-  follows the device's own idea of "reached", which means a target change of
-  2 °C or less does not turn it off, and it stays on while the device cools
-  down.
+  follows the device's own idea of "reached": it turns off again only when the
+  target is raised at least 3 °C above the previous one, never when the target
+  is lowered, and it stays on while the device cools down.
 - The thermostat card now shows **Heating** while the vaporizer is working
   towards its target, **Heat** once it is holding temperature, and **Idle**
   while it cools down with its display still lit after being switched off.
@@ -31,12 +31,10 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
   **Heater running**, **Pump running** and a **Heater/pump fault** sensor that
   turns on when the vaporizer reports a timing fault in its heater control,
   which stops both the heater and the pump.
-- Three more diagnostic binary sensors, also disabled by default: **Service
-  mode**, on while the vaporizer is running the burn-in mode that heats it to
-  230 °C for ten minutes on its own; **Air step mode**, on when the AIR button
-  steps the pump through 100/75/50 % instead of toggling it; and **Second
-  temperature stage**, on when the vaporizer adds its boost offset to the
-  target.
+- A **Service mode** binary sensor, also disabled by default, on while the
+  vaporizer is running the burn-in mode that heats it to 230 °C for ten minutes
+  on its own. Holding HEAT and AIR together for a few seconds starts it, so it
+  is worth being told about if it happens by accident.
 - Diagnostic sensors for the raw **status registers 1/2/3** and **error history
   1/2**, reported as hex, also disabled by default. They carry the bits this
   integration does not interpret, which is what makes them worth reading when a

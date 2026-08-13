@@ -37,9 +37,6 @@
             "actuator_fault": {
                 "name": "Heater/pump fault"
             },
-            "air_step_mode": {
-                "name": "Air step mode"
-            },
             "at_temperature": {
                 "name": "Ready"
             },
@@ -60,9 +57,6 @@
             },
             "prv2_error": {
                 "name": "Prv2 error"
-            },
-            "second_stage": {
-                "name": "Second temperature stage"
             },
             "service_mode": {
                 "name": "Service mode"

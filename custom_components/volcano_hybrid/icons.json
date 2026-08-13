@@ -6,12 +6,6 @@
       },
       "auto_shutdown": {
         "default": "mdi:power"
-      },
-      "air_step_mode": {
-        "default": "mdi:fan-auto"
-      },
-      "second_stage": {
-        "default": "mdi:thermometer-plus"
       }
     },
     "button": {

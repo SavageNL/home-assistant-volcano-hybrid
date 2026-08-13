@@ -66,12 +66,6 @@
       "service_mode": {
         "name": "Service mode"
       },
-      "air_step_mode": {
-        "name": "Air step mode"
-      },
-      "second_stage": {
-        "name": "Second temperature stage"
-      },
       "prv1_error": {
         "name": "Prv1 error"
       },

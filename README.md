@@ -49,7 +49,7 @@ Additionally, there are the following configuration/diagnostic entities:
 - Whether the auto off timer is enabled (this arms when the target temperature is reached)
 - Whether the heater is running and whether the pump is running
 - A heater/pump fault sensor (the device reports a timing fault in its heater control, which stops both the heater and the pump)
-- Whether the device is in its service/burn-in mode (it heats itself to 230 °C for ten minutes), whether the AIR button steps the pump through 100/75/50 % instead of toggling it, and whether the second temperature stage ("boost") is adding its offset to the target
+- Whether the device is in its service/burn-in mode (it heats itself to 230 °C for ten minutes)
 - The raw status registers 1/2/3 and error history 1/2, as hex, for diagnosing faults (see [the BLE spec](VOLCANO_BLE_SPEC.md)), plus status registers 4/5 — the device's two remaining status words, which nothing decodes yet and which stay empty on a device that does not report them
 - A last fault sensor, which reads that error history rather than reprinting it: it names the newest fault the device logged, and its attributes carry the rest of the log both decoded and raw
 - The device connected state

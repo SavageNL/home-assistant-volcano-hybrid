@@ -95,45 +95,34 @@ async def test_status_binary_sensors(
     assert fault.state == STATE_ON
 
 
-async def test_mode_binary_sensors(
+async def test_service_mode_binary_sensor(
     hass: HomeAssistant,
     entity_registry_enabled_by_default: None,
     init_integration: MockConfigEntry,
     mock_volcano: FakeVolcanoBLE,
 ) -> None:
-    """The device modes held in the status registers are exposed."""
+    """The burn-in mode held in the status registers is exposed."""
+    entity_id = get_entity_id(hass, "binary_sensor", "service_mode")
     mock_volcano.connected = True
     data = mock_volcano.data
     data.service_mode = False
-    data.air_step_mode = True
-    data.second_stage = False
     mock_volcano.data_updated()
     await hass.async_block_till_done()
 
-    for key, expected in (
-        ("service_mode", STATE_OFF),
-        ("air_step_mode", STATE_ON),
-        ("second_stage", STATE_OFF),
-    ):
-        state = hass.states.get(get_entity_id(hass, "binary_sensor", key))
-        assert state is not None, key
-        assert state.state == expected, key
-
+    service_mode = hass.states.get(entity_id)
+    assert service_mode is not None
+    assert service_mode.state == STATE_OFF
     # Service mode drives the device to 230 °C on its own, so it is reported as
     # a problem rather than as a mode.
-    service_mode = hass.states.get(get_entity_id(hass, "binary_sensor", "service_mode"))
-    assert service_mode is not None
     assert service_mode.attributes["device_class"] == BinarySensorDeviceClass.PROBLEM
 
     data.service_mode = True
-    data.second_stage = True
     mock_volcano.data_updated()
     await hass.async_block_till_done()
 
-    for key in ("service_mode", "second_stage"):
-        state = hass.states.get(get_entity_id(hass, "binary_sensor", key))
-        assert state is not None, key
-        assert state.state == STATE_ON, key
+    service_mode = hass.states.get(entity_id)
+    assert service_mode is not None
+    assert service_mode.state == STATE_ON
 
 
 async def test_ready_sensor_is_enabled_by_default(
@@ -153,8 +142,6 @@ async def test_ready_sensor_is_enabled_by_default(
         "fan",
         "actuator_fault",
         "service_mode",
-        "air_step_mode",
-        "second_stage",
     ):
         entry = registry.async_get(get_entity_id(hass, "binary_sensor", key))
         assert entry is not None, key

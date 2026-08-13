@@ -35,10 +35,8 @@ from custom_components.volcano_hybrid.volcano_ble.volcano_ble import (
     CHARACTERISTIC_SET_TEMP,
     CHARACTERISTIC_SHUT_OFF,
     MASK_PRJSTAT1_VOLCANO_ACTUATOR_FAULT,
-    MASK_PRJSTAT1_VOLCANO_AIR_STEP_MODE,
     MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA,
     MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE,
-    MASK_PRJSTAT1_VOLCANO_SECOND_STAGE,
     MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING,
     MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA,
     MASK_PRJSTAT2_VOLCANO_SERVICE_MODE,
@@ -401,15 +399,9 @@ async def test_prj1_decodes_temperature_reached_and_actuator_fault() -> None:
     assert volcano.data.prv1_error is True
 
 
-async def test_status_registers_decode_the_read_only_modes() -> None:
-    """The service, air-step and second-stage bits are decoded, not written."""
+async def test_status_register_decodes_service_mode() -> None:
+    """The service-mode bit is decoded, not written."""
     values = default_values()
-    prj1v = (
-        MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA
-        | MASK_PRJSTAT1_VOLCANO_SECOND_STAGE
-        | MASK_PRJSTAT1_VOLCANO_AIR_STEP_MODE
-    )
-    values[CHARACTERISTIC_PRJ1V] = prj1v.to_bytes(2, "little")
     values[CHARACTERISTIC_PRJ2V] = MASK_PRJSTAT2_VOLCANO_SERVICE_MODE.to_bytes(
         2, "little"
     )
@@ -417,22 +409,18 @@ async def test_status_registers_decode_the_read_only_modes() -> None:
     volcano, _, _ = await connect(client)
 
     data = volcano.data
-    assert data.second_stage is True
-    assert data.air_step_mode is True
     assert data.service_mode is True
-    # None of them is an error condition on its own.
-    assert data.prv1_error is False
+    # Burn-in is a mode, not an error condition.
     assert data.prv2_error is False
 
-    # And they follow the device back down again.
-    callback = client.notify_callbacks[CHARACTERISTIC_PRJ1V]
+    # And it follows the device back down again.
+    callback = client.notify_callbacks[CHARACTERISTIC_PRJ2V]
     await callback(
-        FakeCharacteristic(CHARACTERISTIC_PRJ1V),
-        bytearray(MASK_PRJSTAT1_VOLCANO_HEIZUNG_ENA.to_bytes(2, "little")),
+        FakeCharacteristic(CHARACTERISTIC_PRJ2V),
+        bytearray((0).to_bytes(2, "little")),
     )
 
-    assert data.second_stage is False
-    assert data.air_step_mode is False
+    assert data.service_mode is False
 
 
 async def test_notifications_update_data() -> None:
