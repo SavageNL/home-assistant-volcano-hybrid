@@ -15,6 +15,8 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-08-19
+
 ### Added
 
 - A **Ready** binary sensor, on once the vaporizer reports it reached the target
