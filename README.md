@@ -198,6 +198,11 @@ After removal the device keeps working standalone; no settings on the device its
 - [Automation to automatically progress temperature over time](#Automatically-progress-temperature-over-time)
 - [Example service calls to increase/decrease temperature by Vapesuvius temp guide steps](#increasedecrease-temperature-by-vapesuvius-temp-guide-steps)
 - [Script to fill a bag](#fill-a-bag)
+- [Script for a hands-free bag session](#hands-free-bag-session)
+- [Script for a hands-free whip session](#hands-free-whip-session)
+- [Script for party rounds](#party-rounds)
+- [Ready-made ladders for the session scripts](#ready-made-ladders)
+- [Ready-made whip sessions](#ready-made-whip-sessions)
 
 
 ## Complete dashboard using only stock cards
@@ -632,6 +637,345 @@ alias: Volcano fill bag
 description: ""
 ```
 
+
+### Hands-free bag session
+
+A script that runs a whole temperature ladder on its own, one bag per rung:
+
+1. Turns on the Volcano
+1. For each temperature in the list:
+   1. Sets the temperature and waits for the device to reach it
+   1. Waits 30s, so you can fit a fresh bag
+   1. Turns on the fan for 40s to fill it, then turns it off
+1. Turns off the Volcano after the last bag
+
+Pick your Volcano in the **Volcano** field (the thermostat entity is named after the device, so it isn't always `climate.volcano_hybrid`). Everything else is a script field too, so the same script runs any ladder (see [Ready-made ladders](#ready-made-ladders)). Run it from the script's page to fill the fields in, or call it from a dashboard button or an automation with `data:`. If a rung isn't reached within 15 minutes the script turns the Volcano off and stops with an error.
+
+Temperatures are always in °C, even if Home Assistant shows °F: the script converts them for you. A rung counts as reached within 1 °C, since the Volcano often settles a degree under its target.
+
+List the temperatures low to high: a rung the chamber is already above is treated as reached, so stepping down doesn't wait for it to cool.
+
+```yaml
+alias: Volcano bag session
+description: >-
+  Hands-free ladder: at each temperature it heats until reached, gives you time
+  to fit a fresh bag, fills it, then moves on. Turns the Volcano off at the end.
+mode: single
+fields:
+  volcano:
+    name: Volcano
+    description: The Volcano's thermostat entity (it's named after the device).
+    default: climate.volcano_hybrid
+    selector:
+      entity:
+        filter:
+          - integration: volcano_hybrid
+            domain: climate
+  temperatures:
+    name: Temperatures
+    description: Rungs in °C, in order. One bag is filled at each.
+    default: [179, 185, 191, 199, 205, 211, 217, 230]
+    selector:
+      object: {}
+  fit_seconds:
+    name: Time to fit a bag
+    description: Seconds to wait at each rung before the fan starts.
+    default: 30
+    selector:
+      number:
+        min: 0
+        max: 300
+        unit_of_measurement: s
+  fill_seconds:
+    name: Fill time
+    description: Seconds the fan runs to fill each bag.
+    default: 40
+    selector:
+      number:
+        min: 5
+        max: 120
+        unit_of_measurement: s
+sequence:
+  - variables:
+      volcano_entity: "{{ volcano | default('climate.volcano_hybrid') }}"
+      # Temperatures here are °C. HA shows climate temperatures in your unit
+      # system, so on °F convert (the Volcano's 230 °C max shows as 446 °F).
+      fahrenheit: "{{ state_attr(volcano_entity, 'max_temp') | float(0) > 300 }}"
+  - action: climate.turn_on
+    target:
+      entity_id: "{{ volcano_entity }}"
+  - repeat:
+      for_each: "{{ temperatures | default([179, 185, 191, 199, 205, 211, 217, 230]) }}"
+      sequence:
+        - variables:
+            rung: >-
+              {{ ((repeat.item | float * 9 / 5 + 32) | round(1)) if fahrenheit
+              else repeat.item | float }}
+            margin: "{{ 1.8 if fahrenheit else 1 }}"
+        - action: climate.set_temperature
+          data:
+            temperature: "{{ rung }}"
+          target:
+            entity_id: "{{ volcano_entity }}"
+        - alias: Wait for the device to reach the rung
+          wait_template: >-
+            {{ state_attr(volcano_entity, 'current_temperature') | float(0)
+            >= rung | float - margin | float }}
+          timeout: "00:15:00"
+          continue_on_timeout: true
+        - if: "{{ not wait.completed }}"
+          then:
+            - action: climate.turn_off
+              target:
+                entity_id: "{{ volcano_entity }}"
+            - stop: "Didn't reach {{ repeat.item }} °C within 15 minutes"
+              error: true
+        - alias: Time to fit a fresh bag
+          delay:
+            seconds: "{{ fit_seconds | default(30) | int }}"
+        - action: climate.set_fan_mode
+          data:
+            fan_mode: "on"
+          target:
+            entity_id: "{{ volcano_entity }}"
+        - alias: Fill the bag
+          delay:
+            seconds: "{{ fill_seconds | default(40) | int }}"
+        - action: climate.set_fan_mode
+          data:
+            fan_mode: "off"
+          target:
+            entity_id: "{{ volcano_entity }}"
+  - action: climate.turn_off
+    target:
+      entity_id: "{{ volcano_entity }}"
+```
+
+### Hands-free whip session
+
+The same ladder for whip use: instead of filling bags it holds each temperature for a few minutes, then moves to the next. The fan is left to you.
+
+```yaml
+alias: Volcano whip session
+description: >-
+  Hands-free ladder for whip use: holds each temperature once reached, then
+  moves on. Turns the Volcano off at the end.
+mode: single
+fields:
+  volcano:
+    name: Volcano
+    description: The Volcano's thermostat entity (it's named after the device).
+    default: climate.volcano_hybrid
+    selector:
+      entity:
+        filter:
+          - integration: volcano_hybrid
+            domain: climate
+  temperatures:
+    name: Temperatures
+    description: Rungs in °C, in order.
+    default: [179, 185, 191, 199, 205, 211, 217, 230]
+    selector:
+      object: {}
+  hold_minutes:
+    name: Hold time
+    description: Minutes to hold each rung once it's reached.
+    default: 3
+    selector:
+      number:
+        min: 0.5
+        max: 30
+        step: 0.5
+        unit_of_measurement: min
+sequence:
+  - variables:
+      volcano_entity: "{{ volcano | default('climate.volcano_hybrid') }}"
+      # Temperatures here are °C. HA shows climate temperatures in your unit
+      # system, so on °F convert (the Volcano's 230 °C max shows as 446 °F).
+      fahrenheit: "{{ state_attr(volcano_entity, 'max_temp') | float(0) > 300 }}"
+  - action: climate.turn_on
+    target:
+      entity_id: "{{ volcano_entity }}"
+  - repeat:
+      for_each: "{{ temperatures | default([179, 185, 191, 199, 205, 211, 217, 230]) }}"
+      sequence:
+        - variables:
+            rung: >-
+              {{ ((repeat.item | float * 9 / 5 + 32) | round(1)) if fahrenheit
+              else repeat.item | float }}
+            margin: "{{ 1.8 if fahrenheit else 1 }}"
+        - action: climate.set_temperature
+          data:
+            temperature: "{{ rung }}"
+          target:
+            entity_id: "{{ volcano_entity }}"
+        - alias: Wait for the device to reach the rung
+          wait_template: >-
+            {{ state_attr(volcano_entity, 'current_temperature') | float(0)
+            >= rung | float - margin | float }}
+          timeout: "00:15:00"
+          continue_on_timeout: true
+        - if: "{{ not wait.completed }}"
+          then:
+            - action: climate.turn_off
+              target:
+                entity_id: "{{ volcano_entity }}"
+            - stop: "Didn't reach {{ repeat.item }} °C within 15 minutes"
+              error: true
+        - alias: Hold the rung
+          delay:
+            seconds: "{{ (hold_minutes | default(3) | float * 60) | int }}"
+  - action: climate.turn_off
+    target:
+      entity_id: "{{ volcano_entity }}"
+```
+
+### Party rounds
+
+Bags for a group at one temperature: heats up, gives you time to fit the first bag, then fills a bag every few minutes. It stops after a set number of bags and turns the Volcano off, so it can't run on unattended.
+
+```yaml
+alias: Volcano party rounds
+description: >-
+  One temperature, a bag every few minutes, then the Volcano turns off.
+mode: single
+fields:
+  volcano:
+    name: Volcano
+    description: The Volcano's thermostat entity (it's named after the device).
+    default: climate.volcano_hybrid
+    selector:
+      entity:
+        filter:
+          - integration: volcano_hybrid
+            domain: climate
+  temperature:
+    name: Temperature
+    default: 190
+    selector:
+      number:
+        min: 40
+        max: 230
+        unit_of_measurement: °C
+  bags:
+    name: Bags
+    default: 8
+    selector:
+      number:
+        min: 1
+        max: 20
+  gap_minutes:
+    name: Time between bags
+    description: Minutes to pass the bag round and fit the next one.
+    default: 2.5
+    selector:
+      number:
+        min: 0.5
+        max: 15
+        step: 0.5
+        unit_of_measurement: min
+  fill_seconds:
+    name: Fill time
+    default: 40
+    selector:
+      number:
+        min: 5
+        max: 120
+        unit_of_measurement: s
+sequence:
+  - variables:
+      volcano_entity: "{{ volcano | default('climate.volcano_hybrid') }}"
+      # Temperatures here are °C. HA shows climate temperatures in your unit
+      # system, so on °F convert (the Volcano's 230 °C max shows as 446 °F).
+      fahrenheit: "{{ state_attr(volcano_entity, 'max_temp') | float(0) > 300 }}"
+      target: >-
+        {{ ((temperature | default(190) | float * 9 / 5 + 32) | round(1)) if fahrenheit
+        else temperature | default(190) | float }}
+      margin: "{{ 1.8 if fahrenheit else 1 }}"
+  - action: climate.set_temperature
+    data:
+      temperature: "{{ target }}"
+    target:
+      entity_id: "{{ volcano_entity }}"
+  - action: climate.turn_on
+    target:
+      entity_id: "{{ volcano_entity }}"
+  - alias: Wait for heatup
+    wait_template: >-
+      {{ state_attr(volcano_entity, 'current_temperature') | float(0)
+      >= target | float - margin | float }}
+    timeout: "00:15:00"
+    continue_on_timeout: true
+  - if: "{{ not wait.completed }}"
+    then:
+      - action: climate.turn_off
+        target:
+          entity_id: "{{ volcano_entity }}"
+      - stop: "Didn't heat up within 15 minutes"
+        error: true
+  - alias: Time to fit the first bag
+    delay:
+      seconds: 30
+  - repeat:
+      count: "{{ bags | default(8) | int }}"
+      sequence:
+        - action: climate.set_fan_mode
+          data:
+            fan_mode: "on"
+          target:
+            entity_id: "{{ volcano_entity }}"
+        - alias: Fill the bag
+          delay:
+            seconds: "{{ fill_seconds | default(40) | int }}"
+        - action: climate.set_fan_mode
+          data:
+            fan_mode: "off"
+          target:
+            entity_id: "{{ volcano_entity }}"
+        - if: "{{ repeat.index < bags | default(8) | int }}"
+          then:
+            - alias: Pass it round, fit the next bag
+              delay:
+                seconds: "{{ (gap_minutes | default(2.5) | float * 60) | int }}"
+  - action: climate.turn_off
+    target:
+      entity_id: "{{ volcano_entity }}"
+```
+
+### Ready-made ladders
+
+Paste one of these into the `temperatures` field of the bag or whip session (all °C, low to high):
+
+| Ladder | Temperatures | Notes |
+|---|---|---|
+| Vapesuvius full spectrum | `[179, 185, 191, 199, 205, 211, 217, 230]` | The [temp guide](https://www.reddit.com/user/Vapesuvius/comments/zuwcs7/vapesuvius_unofficial_storz_bickel_temp_guide_2nd/) rungs |
+| Even steps | `[185, 199, 211, 230]` | Rungs 2/4/6/8, leaves more in already-vaped bud for edibles |
+| Odd steps | `[179, 191, 205, 217]` | Rungs 1/3/5/7 |
+| Dosing capsule | `[185, 197, 211, 230]` | Four rungs sized for a capsule |
+| Flavor | `[170, 175, 180]` | The lighter-terpene range |
+| Terpene tour | `[169, 180, 187, 202, 215, 222, 230]` | 1–2 °C above the boiling points of myrcene, limonene, CBN, linalool, borneol, CBC and geraniol |
+| Balloon climb | `[170, 175, 180, 185, 190, 195, 200, 205, 210, 215, 220]` | Eleven 5° steps |
+| Express | `[185, 205, 225]` | Three big steps |
+| Low & slow | `[180, 190, 200]` | Gentle; try a 5-minute hold for whip use |
+| Hot finisher | `[215, 220, 225, 230]` | The last of a used load |
+
+### Ready-made whip sessions
+
+Values for the whip session's `temperatures` and `hold_minutes` fields. A single temperature is just a timed hold that turns the Volcano off at the end.
+
+| Session | Temperatures | Hold time | About |
+|---|---|---|---|
+| Gentle hold | `[185]` | 20 min | 20 min |
+| Classic hold | `[195]` | 15 min | 15 min |
+| Hot hold | `[205]` | 10 min | 10 min; the vapor is warm, a waterpipe helps |
+| Two-stage | `[190, 205]` | 8 min | 16 min: flavor first, then strength |
+| Ramp | `[175, 180, 185, 190, 195, 200, 205, 210, 215]` | 1.5 min | 14 min, each pull a little warmer |
+| Long session | `[185, 195, 205, 215]` | 6 min | 24 min |
+| Vapesuvius | `[179, 185, 191, 199, 205, 211, 217, 230]` | 3 min | 24 min, the full temp guide |
+
+Times are hold time only; add a little for heating between rungs.
+
+Each script runs in `single` mode, so starting it again while it's running does nothing. If you stop a script part-way, it doesn't clean up after itself: turn the fan and heater off yourself.
 
 [validate_url]: https://github.com/SavageNL/home-assistant-volcano-hybrid/actions/workflows/validate.yml
 [validate_badge]: https://github.com/SavageNL/home-assistant-volcano-hybrid/actions/workflows/validate.yml/badge.svg
