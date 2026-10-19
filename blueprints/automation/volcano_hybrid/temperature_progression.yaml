@@ -1,0 +1,88 @@
+blueprint:
+  name: Volcano temperature progression
+  description: >-
+    Steps the Volcano's target temperature up a ladder as the session runs:
+    the first rung when it switches on, the next after each interval, then it
+    stays on the last rung. Follows the Volcano's Current on time sensor, so it
+    starts over whenever the Volcano is switched on again. A temperature you
+    set by hand stays until the next rung starts. Temperatures are in °C, also
+    on a °F setup.
+  domain: automation
+  source_url: https://github.com/SavageNL/home-assistant-volcano-hybrid/blob/main/blueprints/automation/volcano_hybrid/temperature_progression.yaml
+  input:
+    volcano:
+      name: Volcano
+      description: The Volcano's thermostat entity.
+      selector:
+        entity:
+          filter:
+            - integration: volcano_hybrid
+              domain: climate
+    on_time:
+      name: Current on time
+      description: >-
+        The Volcano's Current on time sensor (minutes since the heater or fan
+        was switched on). It is disabled by default: enable it first.
+      selector:
+        entity:
+          filter:
+            - integration: volcano_hybrid
+              domain: sensor
+    temperatures:
+      name: Temperatures
+      description: Rungs in °C, in order.
+      default: [179, 185, 191, 199, 205]
+      selector:
+        object: {}
+    step_minutes:
+      name: Minutes per rung
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: min
+mode: queued
+max_exceeded: silent
+variables:
+  volcano_entity: !input volcano
+  ladder: !input temperatures
+  step_minutes: !input step_minutes
+triggers:
+  - trigger: state
+    entity_id: !input on_time
+conditions:
+  - alias: Running, and not just reconnected
+    condition: template
+    value_template: >-
+      {{ trigger.to_state is not none
+      and trigger.to_state.state | is_number
+      and (trigger.from_state is none
+           or trigger.from_state.state != 'unavailable') }}
+actions:
+  - variables:
+      last: "{{ ladder | count - 1 }}"
+      index: >-
+        {{ [(trigger.to_state.state | float // step_minutes | float) | int,
+        last] | min }}
+      # Off is "unknown", so switching on counts as moving onto the first rung.
+      previous: >-
+        {% if trigger.from_state is not none
+        and trigger.from_state.state | is_number %}
+        {{ [(trigger.from_state.state | float // step_minutes | float) | int,
+        last] | min }}
+        {% else %}-1{% endif %}
+  - alias: Only when a new rung starts, so a manual change sticks until the next
+    condition: template
+    value_template: "{{ index | int != previous | int }}"
+  - variables:
+      celsius: "{{ ladder[index | int] | float }}"
+      rung: >-
+        {{ ((celsius * 9 / 5 + 32) | round(1))
+        if state_attr(volcano_entity, 'max_temp') | float(0) > 300
+        else celsius }}
+  - action: climate.set_temperature
+    data:
+      temperature: "{{ rung }}"
+    target:
+      entity_id: "{{ volcano_entity }}"

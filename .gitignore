@@ -14,6 +14,9 @@ venv
 coverage.xml
 .ruff_cache
 
+# examples site build output (mkdocs build)
+/site/
+
 
 # Home Assistant configuration
 config/*

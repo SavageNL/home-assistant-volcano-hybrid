@@ -1,0 +1,101 @@
+blueprint:
+  name: Volcano hands-free bag session
+  description: >-
+    Runs a temperature ladder on its own, one bag per rung: at each temperature
+    it heats until reached, gives you time to fit a fresh bag, fills it, then
+    moves on. Turns the Volcano off at the end, or when a rung isn't reached
+    within 15 minutes. Temperatures are in °C, also on a °F setup.
+  domain: script
+  author: magikh0e
+  source_url: https://github.com/SavageNL/home-assistant-volcano-hybrid/blob/main/blueprints/script/volcano_hybrid/bag_session.yaml
+  input:
+    volcano:
+      name: Volcano
+      description: The Volcano's thermostat entity.
+      selector:
+        entity:
+          filter:
+            - integration: volcano_hybrid
+              domain: climate
+    temperatures:
+      name: Temperatures
+      description: Rungs in °C, low to high. One bag is filled at each.
+      default: [179, 185, 191, 199, 205, 211, 217, 230]
+      selector:
+        object: {}
+    fit_seconds:
+      name: Time to fit a bag
+      description: Seconds to wait at each rung before the fan starts.
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 300
+          unit_of_measurement: s
+    fill_seconds:
+      name: Fill time
+      description: Seconds the fan runs to fill each bag.
+      default: 40
+      selector:
+        number:
+          min: 5
+          max: 120
+          unit_of_measurement: s
+mode: single
+variables:
+  volcano_entity: !input volcano
+  ladder: !input temperatures
+  fit_seconds: !input fit_seconds
+  fill_seconds: !input fill_seconds
+  # Climate temperatures are in the instance's unit system; the Volcano's
+  # 230 °C maximum shows as 446 °F.
+  fahrenheit: "{{ state_attr(volcano_entity, 'max_temp') | float(0) > 300 }}"
+  margin: "{{ 1.8 if fahrenheit else 1 }}"
+sequence:
+  - action: climate.turn_on
+    target:
+      entity_id: "{{ volcano_entity }}"
+  - repeat:
+      for_each: "{{ ladder }}"
+      sequence:
+        - variables:
+            rung: >-
+              {{ ((repeat.item | float * 9 / 5 + 32) | round(1)) if fahrenheit
+              else repeat.item | float }}
+        - action: climate.set_temperature
+          data:
+            temperature: "{{ rung }}"
+          target:
+            entity_id: "{{ volcano_entity }}"
+        - alias: Wait for the device to reach the rung
+          wait_template: >-
+            {{ state_attr(volcano_entity, 'current_temperature') | float(0)
+            >= rung | float - margin | float }}
+          timeout: "00:15:00"
+          continue_on_timeout: true
+        - if: "{{ not wait.completed }}"
+          then:
+            - action: climate.turn_off
+              target:
+                entity_id: "{{ volcano_entity }}"
+            - stop: "Didn't reach {{ repeat.item }} °C within 15 minutes"
+              error: true
+        - alias: Time to fit a fresh bag
+          delay:
+            seconds: "{{ fit_seconds | int }}"
+        - action: climate.set_fan_mode
+          data:
+            fan_mode: "on"
+          target:
+            entity_id: "{{ volcano_entity }}"
+        - alias: Fill the bag
+          delay:
+            seconds: "{{ fill_seconds | int }}"
+        - action: climate.set_fan_mode
+          data:
+            fan_mode: "off"
+          target:
+            entity_id: "{{ volcano_entity }}"
+  - action: climate.turn_off
+    target:
+      entity_id: "{{ volcano_entity }}"

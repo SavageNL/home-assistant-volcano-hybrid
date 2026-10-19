@@ -54,6 +54,12 @@ The reasons not to do it are risk and licensing, and they should be argued on th
 
 If it is ever built, it belongs behind an explicit opt-in, should refuse to start over a proxied connection, and needs the CRC and page sequence verified against a device that can be recovered. The Venty and Veazy protocol layer goes the other way on purpose: `QvapDevice` refuses the forbidden commands (`0x0C`, `0x30`) outright and, until the device confirms it is not in its bootloader, everything but the firmware query.
 
+## Examples site
+
+Usage examples do not live in the README (it has one link to them) but on a GitHub Pages site built with MkDocs Material: `mkdocs.yml` at the root, the pages in `docs/`, the build pinned in `requirements-docs.txt`. `.github/workflows/docs.yml` runs `mkdocs build --strict` on every change to them and deploys from `main`; Pages must be set to deploy from GitHub Actions in the repository settings. Build locally with `pip install -r requirements-docs.txt && mkdocs serve`.
+
+Scripts and automations with settings ship as blueprints in `blueprints/<script|automation>/volcano_hybrid/`, and their page offers both an import button (a `my.home-assistant.io` blueprint-import link to the file on `main`) and a standalone YAML version, so a logic change has to land in both. `tests/test_blueprints.py` expands every blueprint through Home Assistant's own blueprint and script/automation validation, checks each `source_url` points at the file itself, and fails when a blueprint has no import button in `docs/`.
+
 ## Architecture
 
 Three protocol references live in the repo root, one per protocol:

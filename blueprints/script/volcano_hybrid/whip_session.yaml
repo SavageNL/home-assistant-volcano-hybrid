@@ -1,0 +1,81 @@
+blueprint:
+  name: Volcano hands-free whip session
+  description: >-
+    Runs a temperature ladder for whip use: holds each temperature for a few
+    minutes once reached, then moves on. The fan is left to you. Turns the
+    Volcano off at the end, or when a rung isn't reached within 15 minutes.
+    Temperatures are in °C, also on a °F setup. Set the Volcano's Auto-off time
+    longer than the whole session: the fan is never switched here, so nothing
+    restarts the device's own auto-off countdown.
+  domain: script
+  author: magikh0e
+  source_url: https://github.com/SavageNL/home-assistant-volcano-hybrid/blob/main/blueprints/script/volcano_hybrid/whip_session.yaml
+  input:
+    volcano:
+      name: Volcano
+      description: The Volcano's thermostat entity.
+      selector:
+        entity:
+          filter:
+            - integration: volcano_hybrid
+              domain: climate
+    temperatures:
+      name: Temperatures
+      description: Rungs in °C, low to high.
+      default: [179, 185, 191, 199, 205, 211, 217, 230]
+      selector:
+        object: {}
+    hold_minutes:
+      name: Hold time
+      description: Minutes to hold each rung once it's reached.
+      default: 3
+      selector:
+        number:
+          min: 0.5
+          max: 30
+          step: 0.5
+          unit_of_measurement: min
+mode: single
+variables:
+  volcano_entity: !input volcano
+  ladder: !input temperatures
+  hold_minutes: !input hold_minutes
+  # Climate temperatures are in the instance's unit system; the Volcano's
+  # 230 °C maximum shows as 446 °F.
+  fahrenheit: "{{ state_attr(volcano_entity, 'max_temp') | float(0) > 300 }}"
+  margin: "{{ 1.8 if fahrenheit else 1 }}"
+sequence:
+  - action: climate.turn_on
+    target:
+      entity_id: "{{ volcano_entity }}"
+  - repeat:
+      for_each: "{{ ladder }}"
+      sequence:
+        - variables:
+            rung: >-
+              {{ ((repeat.item | float * 9 / 5 + 32) | round(1)) if fahrenheit
+              else repeat.item | float }}
+        - action: climate.set_temperature
+          data:
+            temperature: "{{ rung }}"
+          target:
+            entity_id: "{{ volcano_entity }}"
+        - alias: Wait for the device to reach the rung
+          wait_template: >-
+            {{ state_attr(volcano_entity, 'current_temperature') | float(0)
+            >= rung | float - margin | float }}
+          timeout: "00:15:00"
+          continue_on_timeout: true
+        - if: "{{ not wait.completed }}"
+          then:
+            - action: climate.turn_off
+              target:
+                entity_id: "{{ volcano_entity }}"
+            - stop: "Didn't reach {{ repeat.item }} °C within 15 minutes"
+              error: true
+        - alias: Hold the rung
+          delay:
+            seconds: "{{ (hold_minutes | float * 60) | int }}"
+  - action: climate.turn_off
+    target:
+      entity_id: "{{ volcano_entity }}"

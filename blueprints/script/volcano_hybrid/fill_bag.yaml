@@ -1,0 +1,92 @@
+blueprint:
+  name: Volcano fill a bag
+  description: >-
+    Turns the Volcano on, waits until it reaches its target temperature, fills
+    one bag, leaves a moment to top it up by hand, then turns the Volcano off.
+    Turns it off and stops with an error if the target isn't reached within 15
+    minutes.
+  domain: script
+  source_url: https://github.com/SavageNL/home-assistant-volcano-hybrid/blob/main/blueprints/script/volcano_hybrid/fill_bag.yaml
+  input:
+    volcano:
+      name: Volcano
+      description: The Volcano's thermostat entity.
+      selector:
+        entity:
+          filter:
+            - integration: volcano_hybrid
+              domain: climate
+    settle_seconds:
+      name: Settle time
+      description: Seconds to wait once the target is reached, before the fan starts.
+      default: 10
+      selector:
+        number:
+          min: 0
+          max: 120
+          unit_of_measurement: s
+    fill_seconds:
+      name: Fill time
+      description: Seconds the fan runs; long enough to nearly fill your bag.
+      default: 40
+      selector:
+        number:
+          min: 5
+          max: 120
+          unit_of_measurement: s
+    top_up_seconds:
+      name: Top-up time
+      description: Seconds before the Volcano turns off, to top the bag up by hand.
+      default: 10
+      selector:
+        number:
+          min: 0
+          max: 120
+          unit_of_measurement: s
+mode: single
+variables:
+  volcano_entity: !input volcano
+  settle_seconds: !input settle_seconds
+  fill_seconds: !input fill_seconds
+  top_up_seconds: !input top_up_seconds
+  # The Volcano often settles a degree under its target.
+  margin: "{{ 1.8 if state_attr(volcano_entity, 'max_temp') | float(0) > 300 else 1 }}"
+sequence:
+  - action: climate.turn_on
+    target:
+      entity_id: "{{ volcano_entity }}"
+  - alias: Wait for heatup
+    wait_template: >-
+      {{ state_attr(volcano_entity, 'current_temperature') | float(0)
+      >= state_attr(volcano_entity, 'temperature') | float(0) - margin | float }}
+    timeout: "00:15:00"
+    continue_on_timeout: true
+  - if: "{{ not wait.completed }}"
+    then:
+      - action: climate.turn_off
+        target:
+          entity_id: "{{ volcano_entity }}"
+      - stop: "Didn't reach the target temperature within 15 minutes"
+        error: true
+  - alias: Let it settle
+    delay:
+      seconds: "{{ settle_seconds | int }}"
+  - action: climate.set_fan_mode
+    data:
+      fan_mode: "on"
+    target:
+      entity_id: "{{ volcano_entity }}"
+  - alias: Fill the bag
+    delay:
+      seconds: "{{ fill_seconds | int }}"
+  - action: climate.set_fan_mode
+    data:
+      fan_mode: "off"
+    target:
+      entity_id: "{{ volcano_entity }}"
+  - alias: Time to top the bag up
+    delay:
+      seconds: "{{ top_up_seconds | int }}"
+  - action: climate.turn_off
+    target:
+      entity_id: "{{ volcano_entity }}"

@@ -1,0 +1,3 @@
+# Builds the examples site (mkdocs.yml, docs/). Not needed for the integration
+# or its tests.
+mkdocs-material==9.7.7

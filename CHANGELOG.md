@@ -23,6 +23,10 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
   `VENTY_BLE_SPEC.md`). These devices are polled once a second while connected.
 - The integration is now titled "Storz & Bickel"; the domain and every
   existing entity id are unchanged.
+- An [examples site](https://savagenl.github.io/home-assistant-volcano-hybrid/)
+  replaces the examples in the README. Fill a bag, the temperature
+  progression, and the new hands-free bag session, whip session and party
+  rounds (thanks @magikh0e) can be imported as blueprints.
 - The brand icon is now bundled with the integration
   (`custom_components/volcano_hybrid/brand/icon.png`), so HACS no longer needs
   to reach the Home Assistant brands server to validate the repository.
