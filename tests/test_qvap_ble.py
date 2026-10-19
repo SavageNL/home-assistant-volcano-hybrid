@@ -231,6 +231,16 @@ async def test_unanswered_firmware_query_disconnects() -> None:
     start_polling.assert_not_called()
 
 
+async def test_missing_control_characteristic_clears_the_service_cache() -> None:
+    """Every Qvap serves the control characteristic: without it the table is stale."""
+    client = FakeBleakClient({CHAR_GAP_NAME: b"S&B VY123456"}, missing={CHAR_CONTROL})
+    device = VentyDevice(lambda: None, lambda: None)
+    with patch(ESTABLISH, AsyncMock(return_value=client)):
+        await device.async_manual_update(make_ble_device(name="S&B VY123456"))
+    assert not device.is_connected
+    assert client.cache_clears == 1
+
+
 async def test_reconnect_forgets_the_previous_mode() -> None:
     """A reconnect asks for the mode again before trusting it."""
     device, simulated = await connect()

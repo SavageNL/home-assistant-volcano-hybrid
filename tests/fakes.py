@@ -60,6 +60,7 @@ class FakeBleakClient:
         self.is_connected = True
         self.address = address
         self.services = FakeServices(missing or set())
+        self.cache_clears = 0
 
     async def read_gatt_char(self, char: FakeCharacteristic) -> bytearray:
         """Read a characteristic."""
@@ -78,6 +79,11 @@ class FakeBleakClient:
     async def disconnect(self) -> None:
         """Disconnect the client."""
         self.is_connected = False
+
+    async def clear_cache(self) -> bool:
+        """Record that the cached service table was dropped."""
+        self.cache_clears += 1
+        return True
 
 
 class SimulatedQvap:

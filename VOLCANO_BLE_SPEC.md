@@ -37,6 +37,14 @@ Two facts drive most of the integration's design:
 - **Holding the connection locks everyone else out**, including the official app. That is
   why the integration exposes an *Auto connect* switch and a delayed-reconnect button.
 
+A connection can come up with an incomplete **cached service table** (seen after another
+client, a Web Bluetooth app, had connected in between): every read of a characteristic the
+device does serve then fails with "not found", on every reconnect that reuses the cache.
+The integration treats a missing *required* characteristic as a stale cache, clears it
+(through the backend, so BlueZ's or a proxy's own cache where that backend supports it)
+and rediscovers the services on the next connect. Characteristics only some module revisions serve are looked up first and
+never count as stale.
+
 ### Architecture behind the GATT
 
 The GATT server is served by a **separate BLE module**; the STM32 main controller talks to
@@ -90,11 +98,11 @@ digit is always `0`.
 
 | Characteristic | Used as | Encoding | Notes |
 |---|---|---|---|
-| `10110001` | Current temperature | `uint16`, deci-°C | Read + **notify**. Only notifies on change. CONFIRMED |
-| `10110003` | Target temperature | `uint16`, deci-°C | Read/write + **notify**. Writable range 40–230 °C. CONFIRMED |
+| `10110001` | Current temperature | `uint16`, deci-°C | Read + **notify**. Only notifies on change. The vendor app drops a value that rounds to 6536 °C or more, i.e. `0xFFFF` as "no reading"; the integration goes further and treats anything above 230 °C as no reading. CONFIRMED (vendor app) |
+| `10110003` | Target temperature | `uint16`, deci-°C | Read/write + **notify**. Writable range 40–230 °C. Read as a `uint16`, but the vendor app *writes* it as a 4-byte `uint32`, as the integration does; a 2-byte write was also accepted by V01.03. CONFIRMED |
 | `10110005` | LED brightness | `uint16`, percent 0–100 | Read/write. CONFIRMED |
 | `1011000c` | Auto-off countdown — the **session** countdown (§2) | `uint16`, seconds remaining | Read + **notify**. Runs from the moment an actuator is switched on; `0` when not running. CONFIRMED (live) |
-| `1011000d` | Auto-off setting — seeds `1011000c` | `uint16`, seconds | Read/write. The UI offers 0–360 min in 30-min steps. CONFIRMED (live) |
+| `1011000d` | Auto-off setting — seeds `1011000c` | `uint16`, seconds | Read/write. The vendor app's slider offers 30–360 min in 30-min steps (`min="30"`), and so does the integration; what a setting below 30 min does is untested. CONFIRMED (live) |
 | `1011000f` | Heater **on** | write 1 byte (`0x01`) | Command characteristic. CONFIRMED |
 | `10110010` | Heater **off** | write 1 byte (`0x00`) | Command characteristic. CONFIRMED |
 | `10110013` | Pump/fan **on** | write 1 byte (`0x01`) | Command characteristic. CONFIRMED |

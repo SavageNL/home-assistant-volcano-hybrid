@@ -7,6 +7,8 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from bleak import BleakError
+from bleak.exc import BleakCharacteristicNotFoundError
 from bleak_retry_connector import BleakNotFoundError
 
 from custom_components.volcano_hybrid.volcano_ble.volcano_ble import (
@@ -287,6 +289,117 @@ async def test_connect_drops_the_link_when_a_required_read_fails(
     assert volcano.client is None
     assert client.is_connected is False
     assert not device_updates
+    # The device always serves it, so the table it came from is stale.
+    assert client.cache_clears == 1
+
+
+async def test_stale_service_table_is_discovered_afresh() -> None:
+    """
+    A table missing a required characteristic is not reused (issue #106).
+
+    The device always serves the current temperature, so a table without it
+    is a stale or incomplete cache. Reconnecting on that same cache would fail
+    the same way on every poll until Home Assistant restarts: the cache is
+    cleared, and the next connect skips it until one succeeds.
+    """
+    values = default_values()
+    stale = FakeBleakClient(values, missing={CHARACTERISTIC_CURRENT_TEMP})
+    fresh = FakeBleakClient(values)
+    again = FakeBleakClient(values)
+    establish = AsyncMock(side_effect=[stale, fresh, again])
+    volcano = VolcanoBLE(lambda: None, lambda: None)
+
+    with patch(ESTABLISH_CONNECTION, establish):
+        await volcano.async_manual_update(make_ble_device())
+        assert not volcano.is_connected
+        assert stale.cache_clears == 1
+        assert establish.call_args.kwargs["use_services_cache"] is True
+
+        await volcano.async_manual_update(make_ble_device())
+        assert volcano.is_connected
+        assert volcano.data.current_temp == 185
+        assert establish.call_args.kwargs["use_services_cache"] is False
+
+        # Once a connect has come up, the cache is trusted again.
+        await volcano.async_disconnect()
+        assert fresh.cache_clears == 0
+        await volcano.async_manual_update(make_ble_device())
+        assert establish.call_args.kwargs["use_services_cache"] is True
+
+
+async def test_refresh_on_a_stale_table_reconnects() -> None:
+    """
+    A refresh missing a required characteristic drops the link.
+
+    Kept, the connection failed with "Characteristic … not found" on every
+    poll and never recovered (issue #106).
+    """
+    client = FakeBleakClient(default_values())
+    volcano, _, _ = await connect(client)
+    client.services.missing.add(CHARACTERISTIC_CURRENT_TEMP)
+
+    await volcano.async_manual_update()
+
+    assert not volcano.is_connected
+    assert client.cache_clears == 1
+
+
+async def test_write_on_a_stale_table_reconnects() -> None:
+    """A command whose characteristic is missing drops the link and still fails."""
+    client = FakeBleakClient(default_values())
+    volcano, _, _ = await connect(client)
+    client.services.missing.add(CHARACTERISTIC_FAN_ON)
+
+    with pytest.raises(BleakCharacteristicNotFoundError):
+        await volcano.async_set_fan(True)
+
+    assert not volcano.is_connected
+    assert client.cache_clears == 1
+
+
+async def test_optional_characteristics_do_not_mark_the_table_stale() -> None:
+    """A characteristic not every device serves is absent, not a stale cache."""
+    values = default_values()
+    del values[CHARACTERISTIC_PRJ4V]
+    client = FakeBleakClient(values, missing={CHARACTERISTIC_PRJ4V})
+    volcano, _, _ = await connect(client)
+
+    await volcano.async_disconnect()
+
+    assert client.cache_clears == 0
+
+
+async def test_failing_optional_read_does_not_drop_the_link() -> None:
+    """An optional characteristic that is served but cannot be read is skipped."""
+
+    class FailingReadClient(FakeBleakClient):
+        async def read_gatt_char(self, char: FakeCharacteristic) -> bytearray:
+            if char.uuid == CHARACTERISTIC_PRJ5V:
+                raise BleakError
+            return await super().read_gatt_char(char)
+
+    client = FailingReadClient(default_values())
+    volcano, _, _ = await connect(client)
+
+    assert volcano.is_connected
+    assert volcano.data.prj5 is None
+    assert volcano.data.prj4 == 0x1234
+
+
+async def test_failing_cache_clear_still_disconnects() -> None:
+    """Clearing the cache is best effort; the next connect skips it anyway."""
+
+    class NoClearClient(FakeBleakClient):
+        async def clear_cache(self) -> bool:
+            raise BleakError
+
+    values = default_values()
+    del values[CHARACTERISTIC_PRJ1V]
+    client = NoClearClient(values, missing={CHARACTERISTIC_PRJ1V})
+    volcano, _, _ = await connect(client)
+
+    assert not volcano.is_connected
+    assert client.is_connected is False
 
 
 async def test_connect_drops_the_link_when_a_read_times_out() -> None:
@@ -418,6 +531,26 @@ async def test_notifications_update_data() -> None:
     assert data_updates
 
 
+@pytest.mark.parametrize("raw", [0xFFFF, 65360, 2310])
+async def test_out_of_range_current_temperature_is_no_reading(raw: int) -> None:
+    """
+    A reading above 230 °C is no reading, including the vendor's sentinel.
+
+    The vendor app ignores a value that rounds to 6536 °C or more (0xFFFF);
+    anything above the 230 °C maximum is already treated as unknown here.
+    """
+    client = FakeBleakClient(default_values())
+    volcano, _, _ = await connect(client)
+
+    callback = client.notify_callbacks[CHARACTERISTIC_CURRENT_TEMP]
+    await callback(
+        FakeCharacteristic(CHARACTERISTIC_CURRENT_TEMP),
+        bytearray(raw.to_bytes(2, "little")),
+    )
+
+    assert volcano.data.current_temp is None
+
+
 async def test_set_fan_and_heater() -> None:
     """Fan and heater commands write the matching characteristics."""
     client = FakeBleakClient(default_values())
@@ -438,7 +571,7 @@ async def test_set_target_temperature() -> None:
     client.values[CHARACTERISTIC_SET_TEMP] = (1950).to_bytes(2, "little")
     assert await volcano.async_set_target_temperature(195)
 
-    assert (CHARACTERISTIC_SET_TEMP, (1950).to_bytes(2, "little")) in client.written
+    assert (CHARACTERISTIC_SET_TEMP, (1950).to_bytes(4, "little")) in client.written
     assert volcano.data.set_temp == 195
     assert volcano.data.set_temp_state == 195
     assert not volcano.data.is_assumed
@@ -556,7 +689,7 @@ async def test_pending_write_during_connect_does_not_deadlock() -> None:
             await volcano.async_manual_update(make_ble_device())
 
     assert volcano.is_connected
-    assert (CHARACTERISTIC_SET_TEMP, (2000).to_bytes(2, "little")) in client.written
+    assert (CHARACTERISTIC_SET_TEMP, (2000).to_bytes(4, "little")) in client.written
 
 
 class ConfirmingClient(FakeBleakClient):
@@ -735,4 +868,4 @@ async def test_link_drop_during_connect_replay_does_not_deadlock() -> None:
     # The update reconnected afterwards and delivered the write it held.
     assert volcano.client is second
     assert volcano.is_connected
-    assert (CHARACTERISTIC_SET_TEMP, (2000).to_bytes(2, "little")) in second.written
+    assert (CHARACTERISTIC_SET_TEMP, (2000).to_bytes(4, "little")) in second.written

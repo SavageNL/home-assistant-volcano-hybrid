@@ -29,6 +29,11 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 - Config entries record the device family (`model`); existing entries are
   migrated as Volcano Hybrids automatically, and rolling back to 1.0.5 still
   loads them.
+- The Volcano's **Auto-off time** now starts at 30 minutes, like the official
+  app; it no longer offers 0. A device already set below 30 minutes keeps its
+  setting until you change it.
+- The Volcano's target temperature is now written in the same 4-byte form the
+  official app uses.
 - The weekly firmware check tracks each family separately, so its issues are
   now labelled per family (`firmware-watch:volcano_hybrid-outdated`,
   `firmware-watch:venty-endpoint-error`, …) rather than per kind of problem
@@ -36,6 +41,11 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 
 ### Fixed
 
+- After another Bluetooth client (such as the official web app) had connected
+  to the vaporizer, the integration could come up with an incomplete list of the
+  device's Bluetooth services and fail with "Characteristic … not found" on
+  every update until Home Assistant restarted. It now drops that cached list
+  and reconnects, discovering the services again.
 - A device whose first read after connecting failed stayed connected with half
   its state unknown, and nothing ever reconnected it to read the rest. Such a
   connect is now dropped and retried.

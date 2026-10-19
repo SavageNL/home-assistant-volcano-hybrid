@@ -361,10 +361,12 @@ class VolcanoDevice(StorzBickelDevice):
         # Track the write before sending it, so the device notification that
         # confirms it cannot race ahead and leave the write pending forever.
         self.data.set_temp_write = int(target)
+        # Written as a uint32 like the vendor app does, though read as a uint16
+        # (spec §2).
         written = await self._write_gatt(
             SERVICE_UUID,
             CHARACTERISTIC_SET_TEMP,
-            bytearray(int.to_bytes(int(target * 10), 2, "little")),
+            bytearray(int.to_bytes(int(target * 10), 4, "little")),
         )
         if written:
             await self._async_read_set_temp()

@@ -31,7 +31,9 @@ SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
         entity_category=EntityCategory.CONFIG,
         mode=NumberMode.BOX,
         native_max_value=360,
-        native_min_value=0,
+        # The vendor app's slider starts at 30 (spec §2); what a 0 s session
+        # timer does to the device is untested.
+        native_min_value=30,
         native_step=30,
         native_unit_of_measurement=UnitOfTime.MINUTES,
         entity_registry_enabled_default=False,

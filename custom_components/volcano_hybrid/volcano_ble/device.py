@@ -9,6 +9,7 @@ import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from bleak import BleakClient, BleakError, BleakGATTCharacteristic, BLEDevice
+from bleak.exc import BleakCharacteristicNotFoundError
 from bleak_retry_connector import (
     BleakClientWithServiceCache,
     BleakNotFoundError,
@@ -24,6 +25,8 @@ if TYPE_CHECKING:
     from habluetooth import BluetoothServiceInfoBleak
 
 _LOGGER = logging.getLogger(__name__)
+
+CLEAR_CACHE_TIMEOUT = 10
 
 # The connect attempt the current code runs inside, if any. The connect holds
 # the (non-reentrant) connect lock while it reads the initial state, and that
@@ -86,7 +89,14 @@ class StorzBickelDevice(VolcanoHybridDataStatusProvider):
         self._connect_lock = asyncio.Lock()
         # The token of the connect attempt holding the lock (_CONNECT_ATTEMPT).
         self._connect_attempt: object | None = None
-        self.client: BleakClient | None = None
+        # Set when a characteristic the protocol requires is missing from the
+        # client's service table. The device always serves those, so the table
+        # is a stale or incomplete cache (left by another client, or a
+        # discovery cut short): reconnecting on the same cache would keep
+        # failing until Home Assistant restarts. While set, a disconnect clears
+        # the cache and the next connect discovers the services afresh.
+        self._services_stale = False
+        self.client: BleakClientWithServiceCache | None = None
         self.device = device
         self.data: DeviceData = self.data_class(self)
         self.device_rssi: int | None = None
@@ -141,8 +151,13 @@ class StorzBickelDevice(VolcanoHybridDataStatusProvider):
 
         # This will update when not connected yet
         await self._ensure_client_connected()
-        await self._async_refresh()
-        await self._async_try_ensure_written_values()
+        try:
+            await self._async_refresh()
+            await self._async_try_ensure_written_values()
+        except BleakCharacteristicNotFoundError as err:
+            # Kept, the link would fail this same way on every poll.
+            _LOGGER.debug("Service table is incomplete, reconnecting: %s", err)
+            await self.async_disconnect()
         return self.data
 
     async def _ensure_client_connected(self) -> bool:
@@ -194,6 +209,7 @@ class StorzBickelDevice(VolcanoHybridDataStatusProvider):
                 device,
                 FAMILY_MODEL_NAME[self.family],
                 disconnected_callback=self._disconnected,
+                use_services_cache=not self._services_stale,
             )
         except BleakNotFoundError as err:
             _LOGGER.debug("BLE device not found while connecting: %s", err)
@@ -243,27 +259,53 @@ class StorzBickelDevice(VolcanoHybridDataStatusProvider):
     async def _async_read_and_subscribe_all(self) -> DeviceData:
         """Read all required characteristics from the BLE device."""
         await self._async_read_initial()
+        # A family's own initial read may drop the link instead of raising.
+        if self.is_connected:
+            self._services_stale = False
         return self.data
 
     async def async_disconnect(self) -> None:
         """Disconnect from the device."""
         if self.client:
             if self.client.is_connected:
+                if self._services_stale:
+                    await self._async_clear_service_cache(self.client)
                 await self.client.disconnect()
             self.client = None
             self._on_disconnected()
             self._after_data_updated()
 
     @staticmethod
-    def _get_characteristic(
+    async def _async_clear_service_cache(client: BleakClientWithServiceCache) -> None:
+        """
+        Drop the cached service table, while the link still stands.
+
+        Cleared on the connection, the backend clears its own cache where it
+        can (BlueZ's, or an ESPHome proxy's). Failing is not fatal, since the
+        next connect skips the cache either way.
+        """
+        try:
+            async with asyncio.timeout(CLEAR_CACHE_TIMEOUT):
+                await client.clear_cache()
+        except (BleakError, TimeoutError, OSError, EOFError) as err:
+            _LOGGER.debug("Could not clear the service cache: %s", err)
+
+    @staticmethod
+    def _find_characteristic(
         client: BleakClient, service_uuid: str, characteristic: str
-    ) -> BleakGATTCharacteristic:
-        """Resolve a characteristic, raising BleakError when it is missing."""
+    ) -> BleakGATTCharacteristic | None:
+        """Resolve a characteristic, or None when the table lacks it."""
         service = client.services.get_service(service_uuid)
-        char = service.get_characteristic(characteristic) if service else None
+        return service.get_characteristic(characteristic) if service else None
+
+    def _get_characteristic(
+        self, client: BleakClient, service_uuid: str, characteristic: str
+    ) -> BleakGATTCharacteristic:
+        """Resolve a characteristic the protocol requires."""
+        char = self._find_characteristic(client, service_uuid, characteristic)
         if char is None:
-            msg = f"Characteristic {characteristic} not found"
-            raise BleakError(msg)
+            self._services_stale = True
+            raise BleakCharacteristicNotFoundError(characteristic)
         return char
 
     async def _async_read_optional(
@@ -277,11 +319,18 @@ class StorzBickelDevice(VolcanoHybridDataStatusProvider):
 
         The initial read runs as one asyncio.gather, so a characteristic that a
         firmware or BLE-module revision does not serve would otherwise take the
-        whole connect down with it: _get_characteristic raises BleakError when
-        it is missing, and the remaining reads and subscriptions in the gather
-        never happen. Anything read through here leaves its value unset instead
-        and the rest of the device still comes up.
+        whole connect down with it: _get_characteristic raises when it is
+        missing, and the remaining reads and subscriptions in the gather never
+        happen. Anything read through here leaves its value unset instead and
+        the rest of the device still comes up. Its absence is looked up first,
+        so it does not mark the service table stale either.
         """
+        client = self.client
+        if client is None or not client.is_connected:
+            return
+        if self._find_characteristic(client, service_uuid, characteristic) is None:
+            _LOGGER.debug("Optional characteristic %s is not served", characteristic)
+            return
         try:
             await self._async_read_and_subscribe(
                 service_uuid, characteristic, value_change_callback, subscribe=False
@@ -337,7 +386,11 @@ class StorzBickelDevice(VolcanoHybridDataStatusProvider):
         if not await self._ensure_client_connected() or (client := self.client) is None:
             return False
 
-        char = self._get_characteristic(client, service_uuid, characteristic)
+        try:
+            char = self._get_characteristic(client, service_uuid, characteristic)
+        except BleakCharacteristicNotFoundError:
+            await self.async_disconnect()
+            raise
         await client.write_gatt_char(
             char,
             value,
