@@ -15,6 +15,8 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-26
+
 ### Added
 
 - Support for the Crafty and Crafty+ (experimental — decoded from the vendor
