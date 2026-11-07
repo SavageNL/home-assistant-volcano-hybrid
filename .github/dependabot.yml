@@ -21,6 +21,8 @@ updates:
       # hand. It is not the minimum users need: that is the homeassistant key
       # in hacs.json, matching the floors in manifest.json's requirements.
       - dependency-name: "homeassistant"
+      # Each release pins an exact homeassistant, so bumping it is an HA bump
+      - dependency-name: "pytest-homeassistant-custom-component"
       # The bluetooth libs mirror what the pinned Home Assistant's bluetooth
       # component ships; they move together with homeassistant, by hand
       - dependency-name: "habluetooth"
