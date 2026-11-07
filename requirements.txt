@@ -3,7 +3,7 @@ homeassistant==2026.7.4
 pip>=26.3
 ruff==0.17.4
 mypy==2.4.1
-pytest-homeassistant-custom-component==0.13.348
+pytest-homeassistant-custom-component==0.13.375
 # Pinned to the versions the homeassistant bluetooth component ships with,
 # see homeassistant/components/bluetooth/manifest.json
 # (habluetooth 7.1.2 and bleak-retry-connector 4.7.1 are out, but they are
