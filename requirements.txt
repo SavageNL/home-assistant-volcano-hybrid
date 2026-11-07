@@ -1,12 +1,13 @@
 colorlog==6.12.0
 homeassistant==2026.7.4
-pip>=26.1.2
-ruff==0.16.0
-mypy==2.3.0
+pip>=26.3
+ruff==0.17.4
+mypy==2.4.1
 pytest-homeassistant-custom-component==0.13.348
 # Pinned to the versions the homeassistant bluetooth component ships with,
 # see homeassistant/components/bluetooth/manifest.json
-# (bleak-retry-connector 4.6.3 is out, but HA 2026.7.4 ships 4.6.1)
+# (habluetooth 7.1.2 and bleak-retry-connector 4.7.1 are out, but they are
+# what HA 2026.11 ships; HA 2026.7.4 ships the versions below)
 habluetooth==6.26.5
 bleak==3.0.2
 bleak-retry-connector==4.6.1

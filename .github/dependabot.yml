@@ -16,5 +16,13 @@ updates:
     schedule:
       interval: "quarterly"
     ignore:
-      # Dependabot should not update Home Assistant as that should match the homeassistant key in hacs.json
+      # homeassistant is the version the tests run against and is locked to
+      # what pytest-homeassistant-custom-component pins, so it is bumped by
+      # hand. It is not the minimum users need: that is the homeassistant key
+      # in hacs.json, matching the floors in manifest.json's requirements.
       - dependency-name: "homeassistant"
+      # The bluetooth libs mirror what the pinned Home Assistant's bluetooth
+      # component ships; they move together with homeassistant, by hand
+      - dependency-name: "habluetooth"
+      - dependency-name: "bleak"
+      - dependency-name: "bleak-retry-connector"
