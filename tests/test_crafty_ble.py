@@ -15,6 +15,7 @@ from custom_components.volcano_hybrid.volcano_ble.crafty import (
     CHAR_BATTERY_STATUS2,
     CHAR_BLE_FIRMWARE,
     CHAR_BOOST_TEMP,
+    CHAR_CHARGER_STATUS,
     CHAR_CURRENT_TEMP,
     CHAR_FACTORY_RESET,
     CHAR_FIRMWARE,
@@ -29,6 +30,7 @@ from custom_components.volcano_hybrid.volcano_ble.crafty import (
     CHAR_TARGET_TEMP,
     CHAR_USE_HOURS,
     CHAR_USE_MINUTES,
+    EXTENDED_DIAGNOSTICS,
     SECURITY_CODE_AUTO_OFF,
     CraftyDevice,
 )
@@ -84,6 +86,7 @@ def crafty_plus_values() -> dict[str, bytes]:
         CHAR_SYSTEM_STATUS: u16(0),
         CHAR_BATTERY_STATUS1: u16(0),
         CHAR_BATTERY_STATUS2: u16(0),
+        CHAR_CHARGER_STATUS: u16(2),
     }
 
 
@@ -118,6 +121,8 @@ async def test_connect_reads_a_crafty_plus() -> None:
     assert data.at_temperature is True
     assert data.auto_ble_shutdown is True
     assert data.error is False
+    assert data.charger_status == 2
+    assert data.charging is True
     for uuid in (
         CHAR_CURRENT_TEMP,
         CHAR_BATTERY,
@@ -335,3 +340,48 @@ async def test_unconfirmed_writes_are_replayed_while_on() -> None:
         (CHAR_TARGET_TEMP, u16(1900)),
         (CHAR_BOOST_TEMP, u16(150)),
     ]
+
+
+async def test_charger_status_is_optional_and_polled() -> None:
+    """A device without 000000a3 still connects; one with it is re-read on refresh."""
+    values = crafty_plus_values()
+    del values[CHAR_CHARGER_STATUS]
+    device = await connect(FakeBleakClient(values, missing={CHAR_CHARGER_STATUS}))
+    assert device.is_connected
+    assert device.data.charging is None
+
+    client = FakeBleakClient(crafty_plus_values())
+    device = await connect(client)
+    assert device.data.charging is True
+    assert CHAR_CHARGER_STATUS not in client.notify_callbacks
+    client.values[CHAR_CHARGER_STATUS] = u16(0)
+    await device.async_manual_update()
+    assert device.data.charging is False
+
+
+async def test_extended_diagnostics_are_read_on_demand() -> None:
+    """Served values are read raw on request; the rest read None."""
+    values = crafty_plus_values()
+    values[EXTENDED_DIAGNOSTICS["battery_voltage"]] = u16(4012)
+    values[EXTENDED_DIAGNOSTICS["charge_cycles"]] = u16(57)
+    served = {
+        EXTENDED_DIAGNOSTICS["battery_voltage"],
+        EXTENDED_DIAGNOSTICS["charge_cycles"],
+    }
+    missing = set(EXTENDED_DIAGNOSTICS.values()) - served
+    device = await connect(FakeBleakClient(values, missing=missing))
+    assert "battery_voltage" not in vars(device.data)
+
+    extended = await device.async_read_extended_diagnostics()
+
+    assert set(extended) == set(EXTENDED_DIAGNOSTICS)
+    assert extended["battery_voltage"] == 4012
+    assert extended["charge_cycles"] == 57
+    assert extended["mains_voltage"] is None
+
+
+async def test_extended_diagnostics_while_disconnected() -> None:
+    """Without a link every value reads None instead of failing the download."""
+    device = CraftyDevice(lambda: None, lambda: None)
+    extended = await device.async_read_extended_diagnostics()
+    assert set(extended.values()) == {None}

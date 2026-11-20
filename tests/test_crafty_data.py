@@ -135,3 +135,16 @@ def test_current_temperature_above_the_target_range_is_kept() -> None:
     assert data.current_temp is None
     # The target range is unchanged.
     assert data.MAX_TEMP == 210
+
+
+@pytest.mark.parametrize(
+    ("status", "charging"),
+    [(None, None), (0, False), (1, False), (2, True), (3, False)],
+)
+def test_charging_is_charger_status_two(
+    status: int | None, charging: bool | None
+) -> None:
+    """Only 2 means charging (spec §4.4); other plugged-in states do not."""
+    data = _data()
+    data.charger_status = status
+    assert data.charging is charging

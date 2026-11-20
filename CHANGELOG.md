@@ -17,6 +17,23 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 
 ### Added
 
+- Crafty / Crafty+: a **Charging** binary sensor (#109). The vendor app has no
+  charging indicator, so this reads a characteristic only older community
+  apps use; it is experimental until owners confirm it. It updates within
+  about 10 seconds of plugging in or out.
+- Crafty / Crafty+: the diagnostics download now also reads the battery and
+  power values those community apps list (voltages, current, capacity, charge
+  cycles, battery temperature), raw, under `extended`. Attaching one taken while
+  charging and one while unplugged helps turn them into entities.
+- The diagnostics download lists every Bluetooth service and characteristic
+  the device offers, with what each supports (read, write, notify), for every
+  device family. It shows what the integration could subscribe to instead of
+  polling, and anything the protocol notes have not documented yet.
+
+## [1.1.0] - 2026-10-19
+
+### Added
+
 - Support for the Crafty and Crafty+ (experimental — decoded from the vendor
   web app and untested on hardware; see `CRAFTY_BLE_SPEC.md`).
 - Support for the Venty and Veazy (experimental — untested on hardware; see

@@ -6,9 +6,10 @@ two can be compared side by side. The Crafty is the closest relative of the Volc
 the same "one characteristic per value, uint16 little-endian, temperatures ×10" GATT style
 and the same PRJSTAT status-word idea, on a different UUID base.
 
-This is a **desk decode, not a live observation**. Nobody involved in this integration owns a
-Crafty, so every claim is tagged with where it came from and nothing here has been checked
-against a real device by this project.
+This is mostly a **desk decode, not a live observation**. Nobody involved in this integration
+owns a Crafty, so every claim is tagged with where it came from. The one hardware data point so
+far is a user's diagnostics download from a Crafty+ (§9): it shows the read side working, and
+nothing more.
 
 | Tag | Meaning |
 |---|---|
@@ -119,7 +120,7 @@ reason is that the firmware re-derives or clears the boost when the base target 
 | `00000093` | PRJSTAT1 (`prjStatusReg`) | R, **notify** | uint16 bit field, §4.1 | CONFIRMED |
 | `000001c3` | PRJSTAT2 (`prjStatusReg2`) | R/W, **notify** | uint16 bit field, §4.2. Written as a whole word | CONFIRMED |
 | `00000083` | System status (`systemStatusReg`) | R | uint16 bit field, §4.3 | CONFIRMED (≥ V02.51 only) |
-| `00000063` | Battery status 1 (`akkuStatusReg`) | R | uint16 bit field, §4.3 | CONFIRMED (≥ V02.51 only) |
+| `00000063` | Battery status 1 (`akkuStatusReg`) | R | uint16 bit field, §4.3. The community clients of §4.4 also subscribe to it and treat a notification as "the power state changed" (SPECULATIVE) | CONFIRMED (≥ V02.51 only) |
 | `00000073` | Battery status 2 (`akkuStatusReg2`) | R | uint16 bit field, §4.3 | CONFIRMED (≥ V02.51 only) |
 | `00000023` | Lifetime heating hours | R | uint16 | CONFIRMED |
 | `000001e3` | Lifetime heating minutes | R | uint16, the minutes part | CONFIRMED (≥ V02.51 only; older firmware has hours only) |
@@ -175,17 +176,67 @@ STRONG for meaning):
 | Battery 1 | `0x4100` | "Please let the device cool down" |
 | Battery 1 | `0x0003` | "Please charge the device" |
 | Battery 1 | `0x0600` | contact support (error) |
+| Battery 1 | `0x0200` | app sets `deviceHasErrors` on connect (inside `0x0600`) |
 | Battery 2 | `0x8000` | "Please use a different charger or cable" |
 | System | `0x0200` | contact support (error) |
 | System | `0x0280` | app sets `deviceHasErrors` on connect |
 
-Whether the app tests each mask as any-bit (`word & mask`) or exact (`word == mask`) is not
-confirmed. The integration reads them as any-bit, which the overlapping rows (`0x0200` inside
-`0x0280`, `0x0003` as a pair of bits) support (STRONG, not CONFIRMED).
+Every mask is tested as any-bit: the app writes `if (akkuStatusReg & 1536 || systemStatusReg &
+512 || prjStatusReg & 8200)`, which is JavaScript truthiness on `word & mask`, never `word ==
+mask` (CONFIRMED). The integration does the same.
 
 The support report the app builds lists, in order: serial, timestamp, PRJSTAT1, PRJSTAT2,
 Battery 1, Battery 2, System — the same shape as the Volcano's five-register report, which is
 why an integration should expose these raw as diagnostic sensors rather than decode them.
+
+### 4.4 Characteristics only community clients read — SPECULATIVE
+
+The vendor web app never touches the characteristics below; it has **no charging indicator at
+all**. They come from older community clients written for the original Crafty, which agree on
+UUIDs and names: [J-Cat/crafty-control](https://github.com/J-Cat/crafty-control)
+(`src/model/craftyUuids.ts`, forked as NopeNix/crafty-control and dumped by
+NopeNix/ESP32-Crafty-Control) and the independent iOS client
+[sasquatch-jr/VapeLog](https://github.com/sasquatch-jr/VapeLog) (`VapeLog/Vape.m`). The names
+look like the vendor's own (German *Akku* for battery), so they probably come from an early
+official app, but no published value backs any of them. Everything here is SPECULATIVE until a
+device confirms it; all are uint16 little-endian like the rest of the GATT table.
+
+| Char | Community name | Unit / encoding (as the clients show it) | Used by the integration |
+|---|---|---|---|
+| `000000a3` | Charger status | 0 = unplugged, **2 = charging**, any other non-zero = plugged in, not charging | yes — *Charging* entity, read on connect and on every fallback poll |
+| `00000013` | Operating time battery | hours ×10 | diagnostics only |
+| `000000b3` | Battery voltage | mV | diagnostics only |
+| `000000c3` | Mains (charger) voltage | mV | diagnostics only |
+| `000000d3` | Heater voltage | mV | diagnostics only |
+| `000000e3` | Battery current | mA (VapeLog treats ≥ 5000 as "heating") | diagnostics only |
+| `000000f3` | PT1000 temperature | °C ×10 | diagnostics only |
+| `00000103` | PT1000 temperature, adjusted | °C ×10 | diagnostics only |
+| `00000113` | Battery temperature | °C ×10 | diagnostics only |
+| `00000123` / `00000133` | Battery temperature min / max | °C ×10 | diagnostics only |
+| `00000143` | Battery full-charge capacity | mAh | diagnostics only |
+| `00000153` | Battery remaining capacity | mAh | diagnostics only |
+| `00000163` / `00000173` | Discharge / charge cycles | count | diagnostics only |
+| `00000183` | Battery design capacity | mAh | diagnostics only |
+| `00000043` | PCB version | raw | diagnostics only |
+
+How the charger status updates is not known. J-Cat's client re-reads it whenever battery status
+1 (`00000063`) notifies; VapeLog polls it every two seconds. Neither subscribes to `000000a3`
+itself, so the integration does not either and re-reads it on its 10 s fallback poll.
+
+Whether either characteristic *can* notify is visible in the `gatt` section of a diagnostics
+download, which lists every characteristic the device serves with its advertised properties.
+A `notify` there means a subscription is accepted, not that the device pushes on every change;
+a debug log taken while plugging in and out settles that.
+
+Both clients also list `00000033` (hardware ID), `00000053` (hardware serial) and `00000042`
+(Bluetooth address); the integration reads none of them — the address is already known and the
+serials would only need redacting.
+
+Which of these the Crafty+ serves is the open question: the integration reads the
+diagnostics-only rows when a diagnostics download is requested (`extended` in the download,
+null where the device does not serve one), so one download from a plugged-in and one from an
+unplugged device settle the table. Battery health (full-charge ÷ design capacity), cycle count
+and battery temperature are the candidates for entities once confirmed.
 
 ---
 
@@ -276,6 +327,36 @@ write-confirmation race exists (STRONG).
   characteristics; useful corroboration that the temperature/boost/battery/LED table has been
   stable since 2015.
 
+- **[sasquatch-jr/VapeLog](https://github.com/sasquatch-jr/VapeLog)** (`VapeLog/Vape.m`) —
+  iOS client; the independent second source for the §4.4 characteristics, including the
+  charger status value `2`.
+
 No firmware image was decompiled for this document, so there is nothing here at the
 STRONG-by-disassembly level that `VOLCANO_BLE_SPEC.md` has for the Volcano's registers.
 Undecoded bits in PRJSTAT1/2 and the three status words are exactly that: undecoded.
+
+---
+
+## 9. Observed on hardware
+
+One diagnostics download, from a user's Crafty+ (issue #108, Home Assistant 2026.11.1,
+integration 1.1.0), firmware `V03.25`, BLE firmware `V2.0.3`. The heater was off, battery 96 %;
+whether it was plugged in is not known.
+
+| Value | Read | Notes |
+|---|---|---|
+| Model | Crafty+ | major 3 → §6, as expected |
+| Current / target / boost | 39 / 170 / 10 °C | target in °C, no °F conversion triggered |
+| LED brightness | 1 | in range; the integration's slider has step 1, the app's step 10 |
+| Auto-off setting / countdown | 300 / 260 s | the countdown reads non-zero with the heater off; what it counts then is unknown |
+| Lifetime heat | 157 h 57 min | |
+| PRJSTAT1 | `0x0400` | bit 10 set with the heater off and not at temperature — **undecoded** |
+| PRJSTAT2 | `0x0000` | vibration on, charge LED on, auto BLE shutdown off |
+| System status | `0x2405` | bits 0, 2, 10, 13; none in an error mask |
+| Battery status 1 | `0x8084` | bits 2, 7, 15; none in a warning or error mask |
+| Battery status 2 | `0x2000` | bit 13 |
+
+What this confirms: the connect sequence of §7, every characteristic the integration reads on
+a ≥ V02.51 device (including the optional ones), the firmware-string parsing and the Crafty+
+detection. What it does not: any write — heater, target, settings — and any decoding beyond the
+app's masks. The status words are recorded so the next download can be compared against them.

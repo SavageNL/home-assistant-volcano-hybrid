@@ -26,11 +26,13 @@ MASK_PRJSTAT2_DISABLE_CHARGELED = 0x0002
 MASK_PRJSTAT2_SET_TEMP_REACHED = 0x0004
 MASK_PRJSTAT2_FIND_DEVICE = 0x0008
 MASK_PRJSTAT2_ENABLE_AUTOBLESHUTDOWN = 0x1000
-# System / battery status words (spec §4.3): the "contact support" masks are the
-# app's, but testing them as "any bit set" is inferred from the table (STRONG),
-# not confirmed.
+# System / battery status words (spec §4.3): the app's "contact support" masks,
+# each tested as "any bit set".
 MASK_SYSTEM_ERROR = 0x0280
 MASK_BATTERY1_ERROR = 0x0600
+# Charger status (spec §4.4, SPECULATIVE): 0 unplugged, 2 charging; any other
+# value is plugged in but not charging.
+CHARGER_STATUS_CHARGING = 2
 
 # Firmware generations (spec §6)
 CRAFTY_SETTINGS_FIRMWARE = (2, 51)
@@ -93,6 +95,7 @@ class CraftyData(DeviceData):
             VolcanoSensor.ERROR,
             VolcanoSensor.NEEDS_FACTORY_RESET,
             VolcanoSensor.FIND_MODE,
+            VolcanoSensor.CHARGING,
             VolcanoSensor.CONNECTED,
             VolcanoSensor.RECONNECT,
             VolcanoSensor.DELAYED_RECONNECT,
@@ -122,6 +125,7 @@ class CraftyData(DeviceData):
         self.system_status: int | None = None
         self.battery_status1: int | None = None
         self.battery_status2: int | None = None
+        self.charger_status: int | None = None
         self.error: bool | None = None
         self.needs_factory_reset: bool | None = None
 
@@ -146,6 +150,13 @@ class CraftyData(DeviceData):
     def model_name(self) -> str:
         """Crafty until the firmware says it is a Crafty+."""
         return "Crafty+" if self.is_plus else "Crafty"
+
+    @property
+    def charging(self) -> bool | None:
+        """Whether the battery is charging; None if the device has not said."""
+        if self.charger_status is None:
+            return None
+        return self.charger_status == CHARGER_STATUS_CHARGING
 
     @property
     def heat_time(self) -> int | None:
@@ -173,11 +184,7 @@ class CraftyData(DeviceData):
         self.auto_ble_shutdown = bool(word & MASK_PRJSTAT2_ENABLE_AUTOBLESHUTDOWN)
 
     def apply_status_words(self) -> None:
-        """
-        Combine the app's 'contact support' masks (spec §4.3).
-
-        Reading each as "any bit set" is inferred (STRONG), not confirmed.
-        """
+        """Combine the app's 'contact support' masks (spec §4.3)."""
         self.error = bool(
             (self.prj1 or 0) & MASK_PRJSTAT_ERROR
             or (self.system_status or 0) & MASK_SYSTEM_ERROR

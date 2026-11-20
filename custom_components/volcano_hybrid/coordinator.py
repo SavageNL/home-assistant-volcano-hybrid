@@ -331,6 +331,14 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[DeviceData]):
         """Make the device signal so it can be found."""
         await self._async_command(self._device.async_find_device())
 
+    async def async_read_extended_diagnostics(self) -> dict[str, int | None]:
+        """Read the device's undecoded extra values, for a diagnostics download."""
+        return await self._device.async_read_extended_diagnostics()
+
+    def gatt_table(self) -> dict[str, dict[str, list[str]]]:
+        """Return the connected device's services, characteristics and properties."""
+        return self._device.gatt_table()
+
     async def set_charge_optimization(self, on: bool) -> None:
         """Enable or disable charge optimisation."""
         await self._async_command(self._device.async_set_charge_optimization(on))

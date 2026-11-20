@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
 from .const import DeviceFamily
 from .crafty_data import (
@@ -15,6 +16,9 @@ from .crafty_data import (
     decode_target,
 )
 from .device import StorzBickelDevice, UnsupportedCommandError, _decode_ascii
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +51,29 @@ CHAR_SECURITY_CODE = "000001b3" + _BASE
 CHAR_PRJSTAT2 = "000001c3" + _BASE
 CHAR_FACTORY_RESET = "000001d3" + _BASE
 CHAR_USE_MINUTES = "000001e3" + _BASE
+# Service 3, not used by the vendor app: only community clients read these
+# (spec §4.4, SPECULATIVE). Every one is read as optional.
+CHAR_CHARGER_STATUS = "000000a3" + _BASE
+# Read only when a diagnostics download asks for them, keyed by the name the
+# diagnostics report them under. Raw uint16, undecoded on purpose.
+EXTENDED_DIAGNOSTICS: dict[str, str] = {
+    "battery_operating_time": "00000013" + _BASE,
+    "battery_voltage": "000000b3" + _BASE,
+    "mains_voltage": "000000c3" + _BASE,
+    "heater_voltage": "000000d3" + _BASE,
+    "battery_current": "000000e3" + _BASE,
+    "pt1000_temp": "000000f3" + _BASE,
+    "pt1000_temp_adjusted": "00000103" + _BASE,
+    "battery_temp": "00000113" + _BASE,
+    "battery_temp_min": "00000123" + _BASE,
+    "battery_temp_max": "00000133" + _BASE,
+    "battery_full_capacity": "00000143" + _BASE,
+    "battery_remaining_capacity": "00000153" + _BASE,
+    "discharge_cycles": "00000163" + _BASE,
+    "charge_cycles": "00000173" + _BASE,
+    "battery_design_capacity": "00000183" + _BASE,
+    "pcb_version": "00000043" + _BASE,
+}
 
 # Spec §5.2. The factory-reset code (1000) is deliberately not defined:
 # nothing here resets a device.
@@ -106,6 +133,7 @@ class CraftyDevice(StorzBickelDevice):
             self._async_read_and_subscribe(
                 SERVICE_STATUS, CHAR_PRJSTAT2, self._parse_prjstat2, subscribe=True
             ),
+            self._async_read_charger_status(),
         ]
         # Only firmware known to be V02.51 or newer has the settings side. A
         # string that does not parse is treated like old firmware, as the
@@ -150,6 +178,34 @@ class CraftyDevice(StorzBickelDevice):
             self._parse_current_temp,
             subscribe=False,
         )
+        # Not known to notify (the community clients poll it), so the
+        # fallback poll is what keeps the charging state current.
+        await self._async_read_charger_status()
+
+    async def _async_read_charger_status(self) -> None:
+        await self._async_read_optional(
+            SERVICE_STATUS, CHAR_CHARGER_STATUS, self._parse_charger_status
+        )
+
+    async def async_read_extended_diagnostics(self) -> dict[str, int | None]:
+        """
+        Read the community-documented service-3 values (spec §4.4).
+
+        Only for the diagnostics download: none of them is decoded or shown as
+        an entity until a device confirms what it serves. A characteristic the
+        device does not serve reads None.
+        """
+        values: dict[str, int | None] = dict.fromkeys(EXTENDED_DIAGNOSTICS)
+
+        def _store(name: str) -> Callable[[bytearray], None]:
+            def _parse(data: bytearray) -> None:
+                values[name] = _u16(data)
+
+            return _parse
+
+        for name, uuid in EXTENDED_DIAGNOSTICS.items():
+            await self._async_read_optional(SERVICE_STATUS, uuid, _store(name))
+        return values
 
     async def _async_read_prjstat1(self, *, subscribe: bool) -> None:
         await self._async_read_and_subscribe(
@@ -215,6 +271,9 @@ class CraftyDevice(StorzBickelDevice):
 
     def _parse_battery_status2(self, data: bytearray) -> None:
         self.data.battery_status2 = _u16(data)
+
+    def _parse_charger_status(self, data: bytearray) -> None:
+        self.data.charger_status = _u16(data)
 
     # -- commands ----------------------------------------------------------
 

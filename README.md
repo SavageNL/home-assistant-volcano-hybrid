@@ -21,7 +21,7 @@ Install using HACS (click the button below if you have it installed), or downloa
 | Device | Tested on hardware | Notes |
 | --- | --- | --- |
 | Volcano Hybrid | yes | — |
-| Crafty+ | **no** | decoded from the vendor app; monitor-only below firmware V02.51 |
+| Crafty+ | partly | reading confirmed from a user's diagnostics (firmware V03.25); control untested |
 | Crafty | **no** | decoded from the vendor app; monitor-only below firmware V02.51 |
 | Venty | **no** | polled every second while connected |
 | Veazy | **no** | polled every second while connected |
@@ -78,7 +78,7 @@ Most of these are disabled by default; enable them under the device page in **Se
 
 ### Crafty / Crafty+
 
-Experimental, untested on hardware. The `climate` entity sets the target temperature and switches the heater; there is no fan, so no fan modes. Entities:
+Experimental. A Crafty+ has been seen connecting and reading correctly; control, and the original Crafty, are untested on hardware. The `climate` entity sets the target temperature and switches the heater; there is no fan, so no fan modes. Entities:
 - Battery (sensor)
 - Auto off countdown (sensor)
 - Total heat time (sensor)
@@ -87,6 +87,7 @@ Experimental, untested on hardware. The `climate` entity sets the target tempera
 - Boost and Superboost (binary sensors)
 - Error and Needs factory reset (binary sensors)
 - Find mode active (binary sensor)
+- Charging (binary sensor; experimental — the vendor app has no charging indicator, so this uses a value only community apps read)
 - Boost temperature (configurable)
 - LED Brightness (configurable)
 - Auto off time (configurable)

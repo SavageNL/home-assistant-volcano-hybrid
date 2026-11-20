@@ -81,6 +81,7 @@ GOLDEN_ENTITIES: dict[DeviceFamily, dict[str, set[str]]] = {
             "error",
             "needs_factory_reset",
             "find_mode",
+            "charging",
             "connected",
         },
         "button": {"reconnect", "delayed_reconnect", "find_device"},

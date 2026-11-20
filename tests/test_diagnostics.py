@@ -146,6 +146,7 @@ async def test_diagnostics_for_a_crafty(
         "battery_status2": None,
     }
     assert diagnostics["state"]["battery"] == 60
+    assert "extended" not in diagnostics
     # Reported once, under registers.
     for name in diagnostics["registers"]:
         assert name not in diagnostics["state"]
@@ -164,4 +165,31 @@ async def test_diagnostics_are_json(
 ) -> None:
     """Every family's dump serialises as the JSON download it becomes."""
     diagnostics = await async_get_config_entry_diagnostics(hass, init_integration)
+    json.dumps(diagnostics)
+
+
+@pytest.mark.parametrize("device_family", [DeviceFamily.CRAFTY], indirect=True, ids=str)
+async def test_diagnostics_include_extended_values(
+    hass: HomeAssistant, init_integration: MockConfigEntry, mock_volcano: FakeDevice
+) -> None:
+    """The values only community clients read are added, raw, when there are any."""
+    mock_volcano.extended_diagnostics = {"battery_voltage": 4012, "charge_cycles": None}
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, init_integration)
+
+    assert diagnostics["extended"] == {"battery_voltage": 4012, "charge_cycles": None}
+    json.dumps(diagnostics)
+
+
+async def test_diagnostics_include_the_gatt_table(
+    hass: HomeAssistant, init_integration: MockConfigEntry, mock_volcano: FakeDevice
+) -> None:
+    """The service table is reported with each characteristic's properties."""
+    before = await async_get_config_entry_diagnostics(hass, init_integration)
+    assert before["gatt"] == {}
+    mock_volcano.gatt = {"svc": {"char": ["notify", "read"]}}
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, init_integration)
+
+    assert diagnostics["gatt"] == {"svc": {"char": ["notify", "read"]}}
     json.dumps(diagnostics)

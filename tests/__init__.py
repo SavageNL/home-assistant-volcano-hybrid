@@ -120,6 +120,8 @@ class FakeDevice(VolcanoHybridDataStatusProvider):
         self.commands: list[tuple[str, Any]] = []
         self.disconnect_count = 0
         self.manual_update_count = 0
+        self.extended_diagnostics: dict[str, int | None] = {}
+        self.gatt: dict[str, dict[str, list[str]]] = {}
 
     def attach(
         self,
@@ -164,6 +166,14 @@ class FakeDevice(VolcanoHybridDataStatusProvider):
         """Record a disconnect."""
         self.disconnect_count += 1
         self.connected = False
+
+    async def async_read_extended_diagnostics(self) -> dict[str, int | None]:
+        """Return the configured extra diagnostic values."""
+        return dict(self.extended_diagnostics)
+
+    def gatt_table(self) -> dict[str, dict[str, list[str]]]:
+        """Return the configured service table."""
+        return self.gatt
 
     def _command(self, name: str, value: Any) -> bool:
         """Record a command, raising or failing when configured to."""

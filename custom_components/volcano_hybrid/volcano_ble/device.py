@@ -475,6 +475,31 @@ class StorzBickelDevice(VolcanoHybridDataStatusProvider):
         """Make the device signal so it can be found (Crafty+, Venty, Veazy)."""
         raise self._unsupported()
 
+    async def async_read_extended_diagnostics(self) -> dict[str, int | None]:
+        """Read undecoded values for the diagnostics download; none by default."""
+        return {}
+
+    def gatt_table(self) -> dict[str, dict[str, list[str]]]:
+        """
+        Every service and characteristic the connected device serves.
+
+        Each characteristic maps to the properties it advertises (read, write,
+        notify, ...), which is what tells a characteristic that can push from
+        one that has to be polled. Taken from the service table already
+        discovered on connect, so it costs no Bluetooth traffic. Empty while
+        disconnected.
+        """
+        client = self.client
+        if client is None or not client.is_connected:
+            return {}
+        return {
+            service.uuid: {
+                char.uuid: sorted(char.properties)
+                for char in sorted(service.characteristics, key=lambda c: c.uuid)
+            }
+            for service in sorted(client.services, key=lambda s: s.uuid)
+        }
+
     async def async_set_charge_optimization(self, on: bool) -> bool:
         """Enable or disable charge optimisation (Venty, Veazy)."""
         raise self._unsupported()

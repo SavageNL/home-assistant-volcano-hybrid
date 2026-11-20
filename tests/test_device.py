@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from typing import Any, cast
+
 import pytest
 
 from custom_components.volcano_hybrid.volcano_ble.const import DeviceFamily
@@ -43,3 +46,38 @@ async def test_base_commands_are_unsupported() -> None:
     device = create_device(DeviceFamily.VOLCANO_HYBRID, lambda: None, lambda: None)
     with pytest.raises(UnsupportedCommandError):
         await StorzBickelDevice.async_set_boost_temperature(device, 10)
+
+
+def test_gatt_table_lists_every_characteristic_with_its_properties() -> None:
+    """The diagnostics' service table comes from the discovered services, sorted."""
+    device = VolcanoDevice(lambda: None, lambda: None)
+    assert device.gatt_table() == {}
+
+    device.client = cast(
+        "Any",
+        SimpleNamespace(
+            is_connected=True,
+            services=[
+                SimpleNamespace(
+                    uuid="00000003-x",
+                    characteristics=[
+                        SimpleNamespace(uuid="000000a3-x", properties=["read"]),
+                        SimpleNamespace(
+                            uuid="00000063-x", properties=["read", "notify"]
+                        ),
+                    ],
+                ),
+                SimpleNamespace(uuid="00000001-x", characteristics=[]),
+            ],
+        ),
+    )
+
+    assert device.gatt_table() == {
+        "00000001-x": {},
+        "00000003-x": {
+            "00000063-x": ["notify", "read"],
+            "000000a3-x": ["read"],
+        },
+    }
+    device.client.is_connected = False
+    assert device.gatt_table() == {}

@@ -114,4 +114,13 @@ async def async_get_config_entry_diagnostics(
             "battery_status1": format_register(data.battery_status1),
             "battery_status2": format_register(data.battery_status2),
         }
+    if extended := await entry.runtime_data.async_read_extended_diagnostics():
+        # Values only community clients read (CRAFTY_BLE_SPEC.md §4.4), raw
+        # and read just now, so a download is how they get confirmed. Null
+        # where the device does not serve one, or is not connected.
+        diagnostics["extended"] = extended
+    # The whole service table with each characteristic's properties: which
+    # ones can notify, and any the specs do not document. Last because it is
+    # long; empty when the device is not connected.
+    diagnostics["gatt"] = entry.runtime_data.gatt_table()
     return async_redact_data(diagnostics, TO_REDACT)
