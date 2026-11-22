@@ -14,7 +14,11 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.volcano_hybrid.volcano_ble import UnsupportedCommandError
+from custom_components.volcano_hybrid.coordinator import whole_degree_target
+from custom_components.volcano_hybrid.volcano_ble import (
+    CommandNotConfirmedError,
+    UnsupportedCommandError,
+)
 
 from . import FakeVolcanoBLE, get_entity_id, make_ble_device, make_service_info
 
@@ -138,6 +142,62 @@ async def test_unsupported_command_raises_translated_error(
     with pytest.raises(HomeAssistantError) as err:
         await init_integration.runtime_data.set_vibration(on=True)
     assert err.value.translation_key == "not_supported"
+
+
+async def test_unconfirmed_command_raises_translated_error(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """A write the device does not take on raises a translated error."""
+    mock_volcano.connected = True
+    mock_volcano.error = CommandNotConfirmedError()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await init_integration.runtime_data.set_vibration(on=True)
+    assert err.value.translation_key == "not_confirmed"
+
+
+@pytest.mark.parametrize(
+    ("target", "current", "expected"),
+    [
+        # A whole °C, as Home Assistant in °C sends it, is taken as is.
+        (195.0, 190, 195),
+        (190.0, 190, 190),
+        # A °F step that rounds onto the current target moves one degree anyway:
+        # 366 °F is 185.56 °C, from 186 °C (shown as 367 °F) that is a step down.
+        (185.56, 186, 185),
+        (185.56, 185, 186),
+        # Float noise from converting a whole °C back and forth is no step.
+        (229.99999, 230, 230),
+        (190.000001, 190, 190),
+        # Rounded to the nearest degree otherwise, and without a known target.
+        (190.4, 185, 190),
+        (190.6, 185, 191),
+        (185.56, None, 186),
+    ],
+)
+def test_whole_degree_target(target: float, current: int | None, expected: int) -> None:
+    """A requested target becomes the whole °C the device stores."""
+    assert whole_degree_target(target, current) == expected
+
+
+async def test_set_target_temperature_is_rounded_and_clamped(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """The coordinator sends a whole °C within the device's range."""
+    mock_volcano.connected = True
+    mock_volcano.data.set_temp = 186
+    coordinator = init_integration.runtime_data
+
+    await coordinator.set_target_temperature(185.56)
+    assert mock_volcano.commands[-1] == ("target_temperature", 185)
+
+    mock_volcano.data.set_temp = 230
+    await coordinator.set_target_temperature(230.6)
+    assert mock_volcano.commands[-1] == ("target_temperature", 230)
 
 
 async def test_refresh_after_unload_does_not_reconnect(

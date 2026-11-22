@@ -17,6 +17,13 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 
 ### Added
 
+- A **Wait for temperature** action (`volcano_hybrid.wait_for_temperature`)
+  that waits until the device has heated up to its target. Unlike a template
+  wait it ends straight away when the device disconnects, the heater is
+  switched off or the target is changed, rather than sitting out its timeout.
+  The script blueprints use it; re-import them to pick it up. See the
+  [Actions](https://savagenl.github.io/home-assistant-volcano-hybrid/actions/)
+  page.
 - Crafty / Crafty+: a **Charging** binary sensor (#109). The vendor app has no
   charging indicator, so this reads a characteristic only older community
   apps use. It updates within about 10 seconds of plugging in or out.
@@ -36,6 +43,22 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 
 ### Fixed
 
+- With Home Assistant set to °F, stepping the target temperature by one
+  degree could do nothing: a 1 °F step is only 0.56 °C and was rounded back
+  onto the old target. A step now always moves the target at least one °C in
+  the direction asked, and a target set from the official app in °F is read
+  to the nearest degree instead of rounded down.
+- Crafty / Crafty+, Venty and Veazy: **Boost** and **Superboost** are now
+  treated as the temperature *difference* they are. They stay in °C by default
+  and, when switched to °F in the entity settings, a 15 °C boost now reads
+  27 °F instead of 59 °F, and setting 27 °F no longer writes a nonsense value.
+- Volcano Hybrid: the current temperature is rounded to the nearest degree
+  rather than down, like the target temperature and the other devices.
+- Volcano and Crafty settings switches (Celsius, display on while cooling,
+  vibration, and the Crafty's other settings) read the setting back after
+  writing it. A device that accepts the write but does not take the setting
+  now fails the command with an error, instead of the switch showing a state
+  the device is not in.
 - Crafty / Crafty+: the switch called **Automatic Bluetooth shutdown** is now
   **Permanent Bluetooth**, as in the official app (#108). It always did what
   the new name says: on keeps Bluetooth on, off lets the device switch it off

@@ -74,17 +74,18 @@ sequence:
     target:
       entity_id: "{{ volcano_entity }}"
   - alias: Wait for heatup
-    wait_template: >-
-      {{ state_attr(volcano_entity, 'current_temperature') | float(0)
-      >= target | float - margin | float }}
-    timeout: "00:15:00"
-    continue_on_timeout: true
-  - if: "{{ not wait.completed }}"
+    action: volcano_hybrid.wait_for_temperature
+    target:
+      entity_id: "{{ volcano_entity }}"
+    data:
+      tolerance: "{{ margin }}"
+    response_variable: heatup
+  - if: "{{ not heatup[volcano_entity].reached }}"
     then:
       - action: climate.turn_off
         target:
           entity_id: "{{ volcano_entity }}"
-      - stop: "Didn't heat up within 15 minutes"
+      - stop: "Didn't heat up ({{ heatup[volcano_entity].reason }})"
         error: true
   - alias: Time to fit the first bag
     delay:

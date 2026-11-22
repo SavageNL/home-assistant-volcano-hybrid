@@ -6,8 +6,10 @@
 rules:
   # Bronze
   action-setup:
-    status: exempt
-    comment: The integration does not register any service actions.
+    status: done
+    comment: >-
+      wait_for_temperature is registered once in async_setup as a platform
+      entity service on the climate entities.
   appropriate-polling:
     status: done
     comment: >-
@@ -24,8 +26,8 @@ rules:
   config-flow-test-coverage: done
   dependency-transparency: done
   docs-actions:
-    status: exempt
-    comment: The integration does not register any service actions.
+    status: done
+    comment: The examples site documents wait_for_temperature (docs/actions.md).
   docs-high-level-description: done
   docs-installation-instructions: done
   docs-removal-instructions: done

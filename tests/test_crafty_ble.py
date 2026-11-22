@@ -44,7 +44,10 @@ from custom_components.volcano_hybrid.volcano_ble.crafty_data import (
     MASK_PRJSTAT2_SET_TEMP_REACHED,
     MASK_PRJSTAT_CRAFTY_ACTIVE,
 )
-from custom_components.volcano_hybrid.volcano_ble.device import UnsupportedCommandError
+from custom_components.volcano_hybrid.volcano_ble.device import (
+    CommandNotConfirmedError,
+    UnsupportedCommandError,
+)
 
 from . import make_ble_device
 from .fakes import FakeBleakClient
@@ -277,6 +280,25 @@ async def test_prjstat2_settings_are_read_modify_write() -> None:
     assert device.data.permanent_bluetooth is False
 
 
+async def test_prjstat2_write_is_read_back() -> None:
+    """A settings bit the device does not take on fails instead of looking applied."""
+    values = crafty_plus_values()
+    client = FakeBleakClient(values)
+    device = await connect(client)
+    before = device.data.vibration
+
+    # The word keeps reading as it was: the write was ignored.
+    with (
+        patch(
+            "custom_components.volcano_hybrid.volcano_ble.device.CONFIRM_RETRY_DELAY",
+            0,
+        ),
+        pytest.raises(CommandNotConfirmedError),
+    ):
+        await device.async_set_vibration(not before)
+    assert device.data.vibration is before
+
+
 async def test_find_device_needs_a_crafty_plus() -> None:
     """Find-my-Crafty sets PRJSTAT2 bit 3; the original Crafty has no such mode."""
     values = crafty_plus_values()
@@ -309,9 +331,11 @@ async def test_simple_settings_are_written_as_uint16() -> None:
     client = FakeBleakClient(crafty_plus_values())
     device = await connect(client)
     client.written.clear()
+    values = client.values
 
     assert await device.async_set_boost_temperature(20)
     assert await device.async_set_led_brightness(40)
+    values[CHAR_PRJSTAT2] = u16(0x1004 | 0x0002)
     assert await device.async_set_charge_led(False)
     assert client.written == [
         (CHAR_BOOST_TEMP, u16(200)),

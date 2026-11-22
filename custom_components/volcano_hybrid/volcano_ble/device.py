@@ -65,6 +65,16 @@ class UnsupportedCommandError(Exception):
     """The device cannot carry out this command (family, firmware or mode)."""
 
 
+class CommandNotConfirmedError(Exception):
+    """The device accepted a write but reads back a different value."""
+
+
+# How often a written setting is read back before giving up on it, and the
+# pause between reads, for firmware that applies a write a moment later.
+CONFIRM_ATTEMPTS = 3
+CONFIRM_RETRY_DELAY = 0.5
+
+
 class StorzBickelDevice(VolcanoHybridDataStatusProvider):
     """Connection handling shared by every family; subclasses speak the protocol."""
 
@@ -396,6 +406,28 @@ class StorzBickelDevice(VolcanoHybridDataStatusProvider):
             value,
         )
         return True
+
+    async def _async_confirm(
+        self,
+        read: Callable[[], Awaitable[None]],
+        confirmed: Callable[[], bool],
+    ) -> None:
+        """
+        Read a written setting back until the device reports it.
+
+        A register write that the device acknowledges can still be ignored by
+        it (a bit it does not implement, or a value it refuses), so the switch
+        would show a state the device is not in. Raises
+        CommandNotConfirmedError when the read never shows the new value.
+        """
+        for attempt in range(CONFIRM_ATTEMPTS):
+            if attempt:
+                await asyncio.sleep(CONFIRM_RETRY_DELAY)
+            await read()
+            if confirmed():
+                return
+        msg = "the device did not confirm the new setting"
+        raise CommandNotConfirmedError(msg)
 
     # -- hooks -----------------------------------------------------------
 

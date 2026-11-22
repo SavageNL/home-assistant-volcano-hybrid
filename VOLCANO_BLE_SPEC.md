@@ -391,12 +391,16 @@ word** to the register characteristic — not by writing the whole register back
 
 | Write | Effect |
 |---|---|
-| `mask` | **set** the bits in `mask` |
-| `0x10000 + mask` | **clear** the bits in `mask` |
+| `0x10000 + mask` | **set** the bits in `mask` |
+| `mask` | **clear** the bits in `mask` |
 
-So `0x00000200` sets the Fahrenheit bit and `0x00010200` clears it. Bit 16 of the written
-word is the set/clear selector; the low 16 bits are the mask. CONFIRMED (vendor app; this
-is what the integration's Celsius, display-on-cooling and vibration switches do).
+So `0x00010200` sets the Fahrenheit bit (display in °F) and `0x00000200` clears it (°C).
+Bit 16 of the written word is the set/clear selector; the low 16 bits are the mask.
+CONFIRMED (vendor app; this is what the integration's Celsius, display-on-cooling and
+vibration switches write, and since they read the register back after every write, a
+device that did not follow this convention would fail the write as unconfirmed rather
+than leave the switch showing the wrong state). An earlier revision of this table had
+the two rows swapped; the code, which predates it, was always as above.
 
 **PRJSTAT1 does not accept this convention**, and that is a measured result rather than a
 property of the characteristic: `1010000c` advertises write like the other two (§9), and the

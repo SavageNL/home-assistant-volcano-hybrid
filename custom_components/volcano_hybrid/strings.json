@@ -294,6 +294,37 @@
     },
     "update_failed": {
       "message": "Reading from the device failed: {error}"
+    },
+    "not_confirmed": {
+      "message": "The device accepted the command but did not take on the new setting"
+    },
+    "wait_timeout": {
+      "message": "The device did not reach its target temperature in time"
+    },
+    "wait_disconnected": {
+      "message": "The device disconnected before it reached its target temperature"
+    },
+    "wait_heater_off": {
+      "message": "The heater was switched off before the device reached its target temperature"
+    },
+    "wait_target_changed": {
+      "message": "The target temperature changed before the device reached it"
+    }
+  },
+  "services": {
+    "wait_for_temperature": {
+      "name": "Wait for temperature",
+      "description": "Waits until the device has heated up to its current target temperature. Ends with an error, or with `reached: false` in the response, when the device disconnects, the heater is switched off, the target is changed or the timeout passes.",
+      "fields": {
+        "tolerance": {
+          "name": "Tolerance",
+          "description": "How far below the target still counts as reached, in your temperature unit. The device often settles a degree under its target."
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "How long to wait before giving up."
+        }
+      }
     }
   }
 }

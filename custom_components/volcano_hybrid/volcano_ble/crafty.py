@@ -380,18 +380,36 @@ class CraftyDevice(StorzBickelDevice):
             self._after_data_updated()
         return written
 
-    async def _async_change_prjstat2(self, mask: int, *, set_bit: bool) -> bool:
-        """Read-modify-write one PRJSTAT2 bit, then re-read the word (spec §4.2)."""
+    async def _async_change_prjstat2(
+        self, mask: int, *, set_bit: bool, confirm: bool = True
+    ) -> bool:
+        """
+        Read-modify-write one PRJSTAT2 bit, then re-read the word (spec §4.2).
+
+        With ``confirm`` the re-read has to show the bit as written, or the
+        command fails as unconfirmed. Find-my-device does not confirm: its bit
+        is a trigger the device may clear again by the time it is read.
+        """
         if self.data.prj2 is None:
             return False
         word = (self.data.prj2 | mask) if set_bit else (self.data.prj2 & ~mask)
-        written = await self._write_gatt(SERVICE_STATUS, CHAR_PRJSTAT2, _to_u16(word))
-        if written:
+        if not await self._write_gatt(SERVICE_STATUS, CHAR_PRJSTAT2, _to_u16(word)):
+            return False
+
+        async def _read() -> None:
             await self._async_read_and_subscribe(
                 SERVICE_STATUS, CHAR_PRJSTAT2, self._parse_prjstat2, subscribe=False
             )
+
+        def _confirmed() -> bool:
+            prj2 = self.data.prj2
+            return not confirm or (prj2 is not None and bool(prj2 & mask) == set_bit)
+
+        try:
+            await self._async_confirm(_read, _confirmed)
+        finally:
             self._after_data_updated()
-        return written
+        return True
 
     async def async_set_vibration(self, on: bool) -> bool:
         """Bit 0 is *disable vibration*."""
@@ -417,7 +435,7 @@ class CraftyDevice(StorzBickelDevice):
             msg = "find my device needs a Crafty+"
             raise UnsupportedCommandError(msg)
         return await self._async_change_prjstat2(
-            MASK_PRJSTAT2_FIND_DEVICE, set_bit=True
+            MASK_PRJSTAT2_FIND_DEVICE, set_bit=True, confirm=False
         )
 
     # -- pending writes ----------------------------------------------------

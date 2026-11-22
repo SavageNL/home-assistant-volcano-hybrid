@@ -26,11 +26,15 @@ from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_TEMPERATURE,
+    ATTR_UNIT_OF_MEASUREMENT,
     SERVICE_TURN_OFF,
     STATE_OFF,
     STATE_ON,
+    UnitOfTemperature,
 )
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
+from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 
 from custom_components.volcano_hybrid.volcano_ble import (
     DeviceFamily,
@@ -159,6 +163,51 @@ async def test_numbers(
         blocking=True,
     )
     assert command in mock_volcano.commands
+
+
+async def test_boost_is_a_temperature_difference(
+    hass: HomeAssistant,
+    entity_registry_enabled_by_default: None,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeDevice,
+) -> None:
+    """
+    The boost is an offset, so it converts as a difference, not a temperature.
+
+    As an absolute temperature a 15 °C boost would read 59 °F; as a difference
+    it is 27 °F, and setting 27 °F writes 15 °C back.
+    """
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    mock_volcano.connected = True
+    mock_volcano.data.boost_temp = 15
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    entity_id = get_entity_id(hass, "number", "boost_temp")
+
+    # Not converted to the system unit on its own: a difference has no
+    # obvious display unit, so it stays in the device's °C.
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == "15"
+    assert state.attributes[ATTR_UNIT_OF_MEASUREMENT] == UnitOfTemperature.CELSIUS
+
+    er.async_get(hass).async_update_entity_options(
+        entity_id,
+        NUMBER_DOMAIN,
+        {ATTR_UNIT_OF_MEASUREMENT: UnitOfTemperature.FAHRENHEIT},
+    )
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert float(state.state) == pytest.approx(27)
+
+    await hass.services.async_call(
+        NUMBER_DOMAIN,
+        SERVICE_SET_VALUE,
+        {ATTR_ENTITY_ID: entity_id, ATTR_VALUE: 27},
+        blocking=True,
+    )
+    assert mock_volcano.commands[-1] == ("boost_temp", 15)
 
 
 @pytest.mark.parametrize("key", ["charge_led", "permanent_bluetooth", "vibration"])

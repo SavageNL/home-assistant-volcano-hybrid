@@ -162,5 +162,10 @@
         "default": "mdi:memory"
       }
     }
+  },
+  "services": {
+    "wait_for_temperature": {
+      "service": "mdi:thermometer-check"
+    }
   }
 }

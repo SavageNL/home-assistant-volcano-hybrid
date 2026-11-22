@@ -17,6 +17,7 @@ nav:
       - automations/temperature-progression.md
       - automations/temperature-steps.md
   - Presets: presets.md
+  - Actions: actions.md
 
 theme:
   name: material

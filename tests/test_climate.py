@@ -28,6 +28,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 
 from . import FakeVolcanoBLE, get_entity_id
 
@@ -332,3 +333,42 @@ async def test_climate_command_ble_error(
             blocking=True,
         )
     assert err.value.translation_key == "command_failed"
+
+
+async def test_fahrenheit_steps_always_move_the_target(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """
+    With Home Assistant in °F, a one degree step changes the target.
+
+    The entity steps by 1 in the displayed unit, and 1 °F is only 0.56 °C: a
+    step down from 186 °C (367 °F) asks for 366 °F, 185.56 °C, which rounds
+    back onto 186 °C. It has to land on 185 °C instead.
+    """
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    entity_id = get_entity_id(hass, "climate", "volcano")
+    mock_volcano.connected = True
+    mock_volcano.data.set_temp = 186
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        CLIMATE_DOMAIN,
+        SERVICE_SET_TEMPERATURE,
+        {ATTR_ENTITY_ID: entity_id, ATTR_TEMPERATURE: 366},
+        blocking=True,
+    )
+    assert mock_volcano.commands[-1] == ("target_temperature", 185)
+
+    mock_volcano.data.set_temp = 185
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+    await hass.services.async_call(
+        CLIMATE_DOMAIN,
+        SERVICE_SET_TEMPERATURE,
+        {ATTR_ENTITY_ID: entity_id, ATTR_TEMPERATURE: 366},
+        blocking=True,
+    )
+    assert mock_volcano.commands[-1] == ("target_temperature", 186)

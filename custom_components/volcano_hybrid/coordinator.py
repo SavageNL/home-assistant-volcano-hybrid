@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -28,6 +30,7 @@ from .const import (
     DOMAIN,
 )
 from .volcano_ble import (
+    CommandNotConfirmedError,
     DeviceData,
     DeviceFamily,
     StorzBickelDevice,
@@ -41,6 +44,43 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 _LOGGER = logging.getLogger(__name__)
+
+# A conversion from another unit lands at least 1/18 °C away from a whole
+# degree; anything closer is float noise from converting a whole °C back.
+_TARGET_NOISE = 0.01
+
+
+def whole_degree_target(target: float, current: int | None) -> int:
+    """
+    Round a requested target to the whole °C the device stores.
+
+    Home Assistant converts a target set in °F to °C before it gets here, and
+    steps it by the entity's 1° step in the *displayed* unit. One °F is only
+    5/9 °C, so rounding to the nearest degree can land back on the current
+    target: from 186 °C (shown as 367 °F) a step down asks for 366 °F, which is
+    185.56 °C and rounds to 186 again, so the button seems dead. A request that
+    rounds onto the current target but plainly asks to move goes one degree
+    in the direction asked instead.
+    """
+    nearest = math.floor(target + 0.5)
+    if current is None or nearest != current or abs(target - current) < _TARGET_NOISE:
+        return nearest
+    return current + 1 if target > current else current - 1
+
+
+class TemperatureWaitError(Exception):
+    """A wait for the target temperature ended without reaching it."""
+
+    def __init__(self, reason: str) -> None:
+        """Record why the wait ended, as one of the WAIT_* reasons."""
+        super().__init__(reason)
+        self.reason = reason
+
+
+WAIT_TIMEOUT = "timeout"
+WAIT_DISCONNECTED = "disconnected"
+WAIT_HEATER_OFF = "heater_off"
+WAIT_TARGET_CHANGED = "target_changed"
 
 type VolcanoHybridConfigEntry = ConfigEntry[VolcanoHybridCoordinator]
 
@@ -271,6 +311,11 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[DeviceData]):
                 translation_domain=DOMAIN,
                 translation_key="not_supported",
             ) from err
+        except CommandNotConfirmedError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="not_confirmed",
+            ) from err
         except BleakError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -291,8 +336,50 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[DeviceData]):
         await self._async_command(self._device.async_set_heater(on))
 
     async def set_target_temperature(self, target: float) -> None:
-        """Set the target temperature."""
-        await self._async_command(self._device.async_set_target_temperature(target))
+        """Set the target temperature, rounded to a whole °C."""
+        data = self.data
+        whole = whole_degree_target(target, data.set_temp_state)
+        whole = max(data.MIN_TEMP, min(data.MAX_TEMP, whole))
+        await self._async_command(self._device.async_set_target_temperature(whole))
+
+    async def async_wait_for_temperature(
+        self, tolerance: float, max_wait: float
+    ) -> None:
+        """
+        Wait until the current temperature reaches the target, less a tolerance.
+
+        Raises TemperatureWaitError as soon as the target can no longer be
+        reached the way it was asked for: the device disconnects, the heater is
+        switched off, or someone changes the target in the meantime. A target
+        below the current temperature counts as reached; this never waits for
+        the device to cool down.
+        """
+        target = self.data.set_temp_state
+        if target is None:
+            raise TemperatureWaitError(WAIT_DISCONNECTED)
+        updated = asyncio.Event()
+        remove_listener = self.async_add_listener(updated.set)
+        try:
+            async with asyncio.timeout(max_wait):
+                while not self._temperature_reached(target, tolerance):
+                    updated.clear()
+                    await updated.wait()
+        except TimeoutError as err:
+            raise TemperatureWaitError(WAIT_TIMEOUT) from err
+        finally:
+            remove_listener()
+
+    def _temperature_reached(self, target: int, tolerance: float) -> bool:
+        """Whether the wait is over; raises when it can no longer succeed."""
+        data = self.data
+        if not self._device.is_connected:
+            raise TemperatureWaitError(WAIT_DISCONNECTED)
+        if data.heater_state is False:
+            raise TemperatureWaitError(WAIT_HEATER_OFF)
+        if data.set_temp_state != target:
+            raise TemperatureWaitError(WAIT_TARGET_CHANGED)
+        current = data.current_temp
+        return current is not None and current >= target - tolerance
 
     async def set_showing_celsius(self, on: bool) -> None:
         """Set the toggle for showing Celsius."""

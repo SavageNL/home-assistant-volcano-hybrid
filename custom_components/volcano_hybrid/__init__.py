@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS, Platform
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_MODEL, DOMAIN
 from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
+from .services import async_setup_services
 from .volcano_ble import DeviceFamily
+
+if TYPE_CHECKING:
+    from homeassistant.helpers.typing import ConfigType
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -21,6 +30,12 @@ PLATFORMS: list[Platform] = [
     Platform.SWITCH,
     Platform.UPDATE,
 ]
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the actions, once for every entry."""
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(

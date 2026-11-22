@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
 # The manufacturer id is re-exported: tests import it from this module.
 from .const import STORZ_BICKEL_MANUFACTURER_ID, DeviceFamily  # noqa: F401
 from .device import StorzBickelDevice, _decode_ascii
 from .volcano_hybrid_data import VolcanoHybridData
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _LOGGER = logging.getLogger(__name__)
 # BLE service and characteristic placeholders
@@ -66,6 +70,8 @@ MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA = 512
 MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING = 4096
 MASK_PRJSTAT2_VOLCANO_ERR = 59
 MASK_PRJSTAT3_VOLCANO_VIBRATION = 1024
+# Bit 16 of a register write: set the masked bit rather than clear it.
+REGISTER_SET_BIT = 0x10000
 
 
 class VolcanoDevice(StorzBickelDevice):
@@ -85,7 +91,9 @@ class VolcanoDevice(StorzBickelDevice):
 
     async def _async_read_set_temp(self, *, subscribe: bool = False) -> None:
         def _read_set_temp_inner(data: bytearray) -> None:
-            self.data.set_temp = int(int.from_bytes(data, "little") / 10)
+            # Rounded, not truncated: the vendor app in °F mode stores the
+            # nearest tenth of a whole °F, so 366 °F arrives as 1856 (185.6 °C).
+            self.data.set_temp = (int.from_bytes(data, "little") + 5) // 10
 
         await self._async_read_and_subscribe(
             SERVICE_UUID,
@@ -133,7 +141,8 @@ class VolcanoDevice(StorzBickelDevice):
 
     async def _async_read_current_temp(self, *, subscribe: bool = False) -> None:
         def _read_current_temp_inner(data: bytearray) -> None:
-            self.data.current_temp = int(int.from_bytes(data, "little") / 10)
+            # To the nearest degree, like the target and the other families.
+            self.data.current_temp = (int.from_bytes(data, "little") + 5) // 10
 
         await self._async_read_and_subscribe(
             SERVICE_UUID,
@@ -142,27 +151,27 @@ class VolcanoDevice(StorzBickelDevice):
             subscribe=subscribe,
         )
 
+    def _parse_prj2v(self, data: bytearray) -> None:
+        prj2v = int.from_bytes(data, "little")
+        self.data.prj2 = prj2v
+        self.data.showing_celsius = bool(
+            prj2v & MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA == 0
+        )
+        self.data.display_on_cooling = bool(
+            prj2v & MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING == 0
+        )
+        # Bit 6: the service / burn-in mode, entered by holding HEAT and AIR
+        # together. It drives the device to 230 °C for ten minutes with the
+        # pump off, so spec §3.6 says to surface it rather than ignore it.
+        self.data.service_mode = bool(prj2v & MASK_PRJSTAT2_VOLCANO_SERVICE_MODE)
+        self.data.prv2_error = bool(prj2v & MASK_PRJSTAT2_VOLCANO_ERR)
+
+    def _parse_prj3v(self, data: bytearray) -> None:
+        prj3v = int.from_bytes(data, "little")
+        self.data.prj3 = prj3v
+        self.data.vibration = bool(prj3v & MASK_PRJSTAT3_VOLCANO_VIBRATION == 0)
+
     async def _async_read_initial(self) -> None:
-        def _parse_prj2v(data: bytearray) -> None:
-            prj2v = int.from_bytes(data, "little")
-            self.data.prj2 = prj2v
-            self.data.showing_celsius = bool(
-                prj2v & MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA == 0
-            )
-            self.data.display_on_cooling = bool(
-                prj2v & MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING == 0
-            )
-            # Bit 6: the service / burn-in mode, entered by holding HEAT and AIR
-            # together. It drives the device to 230 °C for ten minutes with the
-            # pump off, so spec §3.6 says to surface it rather than ignore it.
-            self.data.service_mode = bool(prj2v & MASK_PRJSTAT2_VOLCANO_SERVICE_MODE)
-            self.data.prv2_error = bool(prj2v & MASK_PRJSTAT2_VOLCANO_ERR)
-
-        def _parse_prj3v(data: bytearray) -> None:
-            prj3v = int.from_bytes(data, "little")
-            self.data.prj3 = prj3v
-            self.data.vibration = bool(prj3v & MASK_PRJSTAT3_VOLCANO_VIBRATION == 0)
-
         def _parse_prj4v(data: bytearray) -> None:
             self.data.prj4 = int.from_bytes(data, "little")
 
@@ -207,10 +216,10 @@ class VolcanoDevice(StorzBickelDevice):
             _async_read_set_temp_and_subscribe(),
             self._async_read_identity_strings(),
             self._async_read_and_subscribe(
-                SERVICE3_UUID, CHARACTERISTIC_PRJ2V, _parse_prj2v, subscribe=True
+                SERVICE3_UUID, CHARACTERISTIC_PRJ2V, self._parse_prj2v, subscribe=True
             ),
             self._async_read_and_subscribe(
-                SERVICE3_UUID, CHARACTERISTIC_PRJ3V, _parse_prj3v, subscribe=True
+                SERVICE3_UUID, CHARACTERISTIC_PRJ3V, self._parse_prj3v, subscribe=True
             ),
             self._async_read_and_subscribe(
                 SERVICE_UUID,
@@ -375,43 +384,70 @@ class VolcanoDevice(StorzBickelDevice):
 
     async def async_set_showing_celsius(self, on: bool) -> bool:
         """Set the toggle for showing Celsius."""
-        if on:
-            return await self._write_register_2(MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA)
-        return await self._write_register_2(
-            65536 + MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA
+        return await self._async_change_register_2(
+            MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA, set_bit=not on
         )
 
     async def async_set_display_on_cooling(self, on: bool) -> bool:
         """Set the toggle for display on cooling."""
-        if on:
-            return await self._write_register_2(
-                MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING
-            )
-        return await self._write_register_2(
-            65536 + MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING
-        )
-
-    async def _write_register_2(self, mask: int) -> bool:
-        """Write to register 2."""
-        return await self._write_gatt(
-            SERVICE3_UUID,
-            CHARACTERISTIC_PRJ2V,
-            bytearray(int.to_bytes(mask, 4, "little")),
+        return await self._async_change_register_2(
+            MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING, set_bit=not on
         )
 
     async def async_set_vibration(self, on: bool) -> bool:
         """Set the toggle for vibration."""
-        if on:
-            return await self._write_register_3(MASK_PRJSTAT3_VOLCANO_VIBRATION)
-        return await self._write_register_3(65536 + MASK_PRJSTAT3_VOLCANO_VIBRATION)
-
-    async def _write_register_3(self, mask: int) -> bool:
-        """Write to register 3."""
-        return await self._write_gatt(
-            SERVICE3_UUID,
+        return await self._async_change_register(
             CHARACTERISTIC_PRJ3V,
-            bytearray(int.to_bytes(mask, 4, "little")),
+            self._parse_prj3v,
+            lambda: self.data.prj3,
+            MASK_PRJSTAT3_VOLCANO_VIBRATION,
+            set_bit=not on,
         )
+
+    async def _async_change_register_2(self, mask: int, *, set_bit: bool) -> bool:
+        return await self._async_change_register(
+            CHARACTERISTIC_PRJ2V,
+            self._parse_prj2v,
+            lambda: self.data.prj2,
+            mask,
+            set_bit=set_bit,
+        )
+
+    async def _async_change_register(
+        self,
+        characteristic: str,
+        parse: Callable[[bytearray], None],
+        register: Callable[[], int | None],
+        mask: int,
+        *,
+        set_bit: bool,
+    ) -> bool:
+        """
+        Set or clear one register bit, then read it back to confirm (spec §3.6).
+
+        A register write is a command, not the new word: the mask names the bit
+        and bit 16 says whether to set it, so the other bits are left alone.
+        """
+        command = mask | (REGISTER_SET_BIT if set_bit else 0)
+        if not await self._write_gatt(
+            SERVICE3_UUID, characteristic, bytearray(command.to_bytes(4, "little"))
+        ):
+            return False
+
+        def _confirmed() -> bool:
+            word = register()
+            return word is not None and bool(word & mask) == set_bit
+
+        try:
+            await self._async_confirm(
+                lambda: self._async_read_and_subscribe(
+                    SERVICE3_UUID, characteristic, parse, subscribe=False
+                ),
+                _confirmed,
+            )
+        finally:
+            self._after_data_updated()
+        return True
 
     async def async_set_shut_off(self, minutes: int) -> bool:
         """Set the shut off time in minutes."""

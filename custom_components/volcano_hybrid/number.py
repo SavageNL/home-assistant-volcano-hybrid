@@ -52,7 +52,9 @@ SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
     VolcanoSensor.BOOST_TEMP: NumberEntityDescription(
         key=VolcanoSensor.BOOST_TEMP,
         translation_key=VolcanoSensor.BOOST_TEMP,
-        device_class=NumberDeviceClass.TEMPERATURE,
+        # An offset added to the target, not a temperature: as TEMPERATURE a
+        # 15 °C boost would show as 59 °F instead of 27 °F.
+        device_class=NumberDeviceClass.TEMPERATURE_DELTA,
         entity_category=EntityCategory.CONFIG,
         mode=NumberMode.BOX,
         native_min_value=1,
@@ -63,7 +65,9 @@ SENSOR_DESCRIPTIONS: dict[str, NumberEntityDescription] = {
     VolcanoSensor.SUPERBOOST_TEMP: NumberEntityDescription(
         key=VolcanoSensor.SUPERBOOST_TEMP,
         translation_key=VolcanoSensor.SUPERBOOST_TEMP,
-        device_class=NumberDeviceClass.TEMPERATURE,
+        # An offset added to the target, not a temperature: as TEMPERATURE a
+        # 15 °C boost would show as 59 °F instead of 27 °F.
+        device_class=NumberDeviceClass.TEMPERATURE_DELTA,
         entity_category=EntityCategory.CONFIG,
         mode=NumberMode.BOX,
         native_min_value=1,

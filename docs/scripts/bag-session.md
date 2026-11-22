@@ -92,17 +92,18 @@ List the temperatures low to high: a rung the chamber is already above is treate
               target:
                 entity_id: "{{ volcano_entity }}"
             - alias: Wait for the device to reach the rung
-              wait_template: >-
-                {{ state_attr(volcano_entity, 'current_temperature') | float(0)
-                >= rung | float - margin | float }}
-              timeout: "00:15:00"
-              continue_on_timeout: true
-            - if: "{{ not wait.completed }}"
+              action: volcano_hybrid.wait_for_temperature
+              target:
+                entity_id: "{{ volcano_entity }}"
+              data:
+                tolerance: "{{ margin }}"
+              response_variable: heatup
+            - if: "{{ not heatup[volcano_entity].reached }}"
               then:
                 - action: climate.turn_off
                   target:
                     entity_id: "{{ volcano_entity }}"
-                - stop: "Didn't reach {{ repeat.item }} °C within 15 minutes"
+                - stop: "Didn't reach {{ repeat.item }} °C ({{ heatup[volcano_entity].reason }})"
                   error: true
             - alias: Time to fit a fresh bag
               delay:

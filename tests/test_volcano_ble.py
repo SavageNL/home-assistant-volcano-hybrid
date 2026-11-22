@@ -11,6 +11,7 @@ from bleak import BleakError
 from bleak.exc import BleakCharacteristicNotFoundError
 from bleak_retry_connector import BleakNotFoundError
 
+from custom_components.volcano_hybrid.volcano_ble import CommandNotConfirmedError
 from custom_components.volcano_hybrid.volcano_ble.volcano_ble import (
     CHARACTERISTIC_BOOTLOADER_VERSION,
     CHARACTERISTIC_CURRENT_AUTO_OFF_TIME,
@@ -596,11 +597,17 @@ async def test_settings_writes() -> None:
         MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA.to_bytes(4, "little"),
     ) in client.written
 
+    client.values[CHARACTERISTIC_PRJ2V] = (
+        MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA
+    ).to_bytes(2, "little")
     assert await volcano.async_set_showing_celsius(False)
     assert (
         CHARACTERISTIC_PRJ2V,
         (65536 + MASK_PRJSTAT2_VOLCANO_FAHRENHEIT_ENA).to_bytes(4, "little"),
     ) in client.written
+    assert volcano.data.showing_celsius is False
+
+    client.values[CHARACTERISTIC_PRJ2V] = (0).to_bytes(2, "little")
 
     assert await volcano.async_set_display_on_cooling(True)
     assert (
@@ -608,11 +615,73 @@ async def test_settings_writes() -> None:
         MASK_PRJSTAT2_VOLCANO_DISPLAY_ON_COOLING.to_bytes(4, "little"),
     ) in client.written
 
+    client.values[CHARACTERISTIC_PRJ3V] = (MASK_PRJSTAT3_VOLCANO_VIBRATION).to_bytes(
+        2, "little"
+    )
     assert await volcano.async_set_vibration(False)
     assert (
         CHARACTERISTIC_PRJ3V,
         (65536 + MASK_PRJSTAT3_VOLCANO_VIBRATION).to_bytes(4, "little"),
     ) in client.written
+    assert volcano.data.vibration is False
+
+
+async def test_register_write_is_read_back() -> None:
+    """A setting the device does not take on fails instead of looking applied."""
+    client = FakeBleakClient(default_values())
+    volcano, _, _ = await connect(client)
+
+    # The register keeps reading 0: vibration stays enabled.
+    with (
+        patch(
+            "custom_components.volcano_hybrid.volcano_ble.device.CONFIRM_RETRY_DELAY",
+            0,
+        ),
+        pytest.raises(CommandNotConfirmedError),
+    ):
+        await volcano.async_set_vibration(False)
+    assert volcano.data.vibration is True
+
+
+async def test_register_write_confirmed_on_a_later_read() -> None:
+    """Firmware that applies a write a moment later is given a few reads."""
+    client = FakeBleakClient(default_values())
+    volcano, _, _ = await connect(client)
+    original_read = client.read_gatt_char
+    prj3_reads = 0
+
+    async def _slow_register(char: FakeCharacteristic) -> bytearray:
+        nonlocal prj3_reads
+        if char.uuid == CHARACTERISTIC_PRJ3V:
+            prj3_reads += 1
+            if prj3_reads == 2:
+                client.values[CHARACTERISTIC_PRJ3V] = (
+                    MASK_PRJSTAT3_VOLCANO_VIBRATION
+                ).to_bytes(2, "little")
+        return await original_read(char)
+
+    with (
+        patch(
+            "custom_components.volcano_hybrid.volcano_ble.device.CONFIRM_RETRY_DELAY",
+            0,
+        ),
+        patch.object(client, "read_gatt_char", _slow_register),
+    ):
+        assert await volcano.async_set_vibration(False)
+    assert volcano.data.vibration is False
+
+
+async def test_set_target_temperature_reads_back_rounded() -> None:
+    """A target stored in tenths (the vendor app in °F) reads as the nearest °C."""
+    client = FakeBleakClient(default_values())
+    volcano, _, _ = await connect(client)
+
+    callback = client.notify_callbacks[CHARACTERISTIC_SET_TEMP]
+    await callback(
+        FakeCharacteristic(CHARACTERISTIC_SET_TEMP),
+        bytearray((1856).to_bytes(2, "little")),
+    )
+    assert volcano.data.set_temp == 186
 
 
 async def test_pending_writes_dropped_when_device_off() -> None:
@@ -869,3 +938,17 @@ async def test_link_drop_during_connect_replay_does_not_deadlock() -> None:
     assert volcano.client is second
     assert volcano.is_connected
     assert (CHARACTERISTIC_SET_TEMP, (2000).to_bytes(4, "little")) in second.written
+
+
+@pytest.mark.parametrize(("raw", "expected"), [(1844, 184), (1845, 185), (1849, 185)])
+async def test_current_temperature_rounds_to_nearest(raw: int, expected: int) -> None:
+    """The current temperature is the nearest degree, like the target."""
+    client = FakeBleakClient(default_values())
+    volcano, _, _ = await connect(client)
+
+    callback = client.notify_callbacks[CHARACTERISTIC_CURRENT_TEMP]
+    await callback(
+        FakeCharacteristic(CHARACTERISTIC_CURRENT_TEMP),
+        bytearray(raw.to_bytes(2, "little")),
+    )
+    assert volcano.data.current_temp == expected
