@@ -25,7 +25,9 @@ MASK_PRJSTAT2_DISABLE_VIBRATION = 0x0001
 MASK_PRJSTAT2_DISABLE_CHARGELED = 0x0002
 MASK_PRJSTAT2_SET_TEMP_REACHED = 0x0004
 MASK_PRJSTAT2_FIND_DEVICE = 0x0008
-MASK_PRJSTAT2_ENABLE_AUTOBLESHUTDOWN = 0x1000
+# The vendor app calls this mask ENABLE_AUTOBLESHUTDOWN, but the toggle it drives
+# is labelled "Permanent Bluetooth": set, the device keeps Bluetooth on (#108).
+MASK_PRJSTAT2_PERMANENT_BLUETOOTH = 0x1000
 # System / battery status words (spec §4.3): the app's "contact support" masks,
 # each tested as "any bit set".
 MASK_SYSTEM_ERROR = 0x0280
@@ -76,7 +78,7 @@ class CraftyData(DeviceData):
             VolcanoSensor.AUTO_OFF_SECONDS,
             VolcanoSensor.VIBRATION,
             VolcanoSensor.CHARGE_LED,
-            VolcanoSensor.AUTO_BLE_SHUTDOWN,
+            VolcanoSensor.PERMANENT_BLUETOOTH,
             VolcanoSensor.AUTO_CONNECT,
             VolcanoSensor.BATTERY,
             VolcanoSensor.AUTO_OFF_COUNTDOWN,
@@ -96,6 +98,11 @@ class CraftyData(DeviceData):
             VolcanoSensor.NEEDS_FACTORY_RESET,
             VolcanoSensor.FIND_MODE,
             VolcanoSensor.CHARGING,
+            VolcanoSensor.BATTERY_CURRENT,
+            VolcanoSensor.BATTERY_VOLTAGE,
+            VolcanoSensor.BATTERY_HEALTH,
+            VolcanoSensor.CHARGE_CYCLES,
+            VolcanoSensor.DISCHARGE_CYCLES,
             VolcanoSensor.CONNECTED,
             VolcanoSensor.RECONNECT,
             VolcanoSensor.DELAYED_RECONNECT,
@@ -117,7 +124,7 @@ class CraftyData(DeviceData):
         self.heat_minutes: int | None = None
         self.vibration: bool | None = None
         self.charge_led: bool | None = None
-        self.auto_ble_shutdown: bool | None = None
+        self.permanent_bluetooth: bool | None = None
         self.find_mode: bool | None = None
         # Raw words, kept for diagnostics like the Volcano's registers.
         self.prj1: int | None = None
@@ -126,6 +133,14 @@ class CraftyData(DeviceData):
         self.battery_status1: int | None = None
         self.battery_status2: int | None = None
         self.charger_status: int | None = None
+        # Spec §4.4: mV, mA (unsigned, so charging and heating both read
+        # positive), mAh and counts. None where the device does not serve one.
+        self.battery_voltage: int | None = None
+        self.battery_current: int | None = None
+        self.battery_full_capacity: int | None = None
+        self.battery_design_capacity: int | None = None
+        self.charge_cycles: int | None = None
+        self.discharge_cycles: int | None = None
         self.error: bool | None = None
         self.needs_factory_reset: bool | None = None
 
@@ -159,6 +174,14 @@ class CraftyData(DeviceData):
         return self.charger_status == CHARGER_STATUS_CHARGING
 
     @property
+    def battery_health(self) -> int | None:
+        """Full-charge capacity as a percentage of the design capacity."""
+        full, design = self.battery_full_capacity, self.battery_design_capacity
+        if full is None or not design:
+            return None
+        return round(full * 100 / design)
+
+    @property
     def heat_time(self) -> int | None:
         """Lifetime heating time in minutes."""
         if self.heat_hours is None:
@@ -181,7 +204,7 @@ class CraftyData(DeviceData):
         self.charge_led = not word & MASK_PRJSTAT2_DISABLE_CHARGELED
         self.at_temperature = bool(word & MASK_PRJSTAT2_SET_TEMP_REACHED)
         self.find_mode = bool(word & MASK_PRJSTAT2_FIND_DEVICE)
-        self.auto_ble_shutdown = bool(word & MASK_PRJSTAT2_ENABLE_AUTOBLESHUTDOWN)
+        self.permanent_bluetooth = bool(word & MASK_PRJSTAT2_PERMANENT_BLUETOOTH)
 
     def apply_status_words(self) -> None:
         """Combine the app's 'contact support' masks (spec §4.3)."""

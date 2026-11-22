@@ -11,12 +11,18 @@ from custom_components.volcano_hybrid.volcano_ble.crafty import (
     CHAR_AUTO_OFF_COUNTDOWN,
     CHAR_AUTO_OFF_SETTING,
     CHAR_BATTERY,
+    CHAR_BATTERY_CURRENT,
+    CHAR_BATTERY_DESIGN_CAPACITY,
+    CHAR_BATTERY_FULL_CAPACITY,
     CHAR_BATTERY_STATUS1,
     CHAR_BATTERY_STATUS2,
+    CHAR_BATTERY_VOLTAGE,
     CHAR_BLE_FIRMWARE,
     CHAR_BOOST_TEMP,
+    CHAR_CHARGE_CYCLES,
     CHAR_CHARGER_STATUS,
     CHAR_CURRENT_TEMP,
+    CHAR_DISCHARGE_CYCLES,
     CHAR_FACTORY_RESET,
     CHAR_FIRMWARE,
     CHAR_HEATER_OFF,
@@ -87,6 +93,13 @@ def crafty_plus_values() -> dict[str, bytes]:
         CHAR_BATTERY_STATUS1: u16(0),
         CHAR_BATTERY_STATUS2: u16(0),
         CHAR_CHARGER_STATUS: u16(2),
+        # The charging snapshot from a real Crafty+ (spec §9.2).
+        CHAR_BATTERY_VOLTAGE: u16(4184),
+        CHAR_BATTERY_CURRENT: u16(757),
+        CHAR_BATTERY_FULL_CAPACITY: u16(3300),
+        CHAR_BATTERY_DESIGN_CAPACITY: u16(3300),
+        CHAR_CHARGE_CYCLES: u16(565),
+        CHAR_DISCHARGE_CYCLES: u16(195),
     }
 
 
@@ -119,7 +132,7 @@ async def test_connect_reads_a_crafty_plus() -> None:
     assert data.heat_time == 12 * 60 + 34
     assert data.heater is True
     assert data.at_temperature is True
-    assert data.auto_ble_shutdown is True
+    assert data.permanent_bluetooth is True
     assert data.error is False
     assert data.charger_status == 2
     assert data.charging is True
@@ -259,9 +272,9 @@ async def test_prjstat2_settings_are_read_modify_write() -> None:
 
     client.written.clear()
     values[CHAR_PRJSTAT2] = u16(0x0004 | 0x0001)
-    assert await device.async_set_auto_ble_shutdown(False)
+    assert await device.async_set_permanent_bluetooth(False)
     assert client.written == [(CHAR_PRJSTAT2, u16(0x0004 | 0x0001))]
-    assert device.data.auto_ble_shutdown is False
+    assert device.data.permanent_bluetooth is False
 
 
 async def test_find_device_needs_a_crafty_plus() -> None:
@@ -370,7 +383,7 @@ async def test_extended_diagnostics_are_read_on_demand() -> None:
     }
     missing = set(EXTENDED_DIAGNOSTICS.values()) - served
     device = await connect(FakeBleakClient(values, missing=missing))
-    assert "battery_voltage" not in vars(device.data)
+    assert device.data.battery_voltage == 4012
 
     extended = await device.async_read_extended_diagnostics()
 
@@ -385,3 +398,46 @@ async def test_extended_diagnostics_while_disconnected() -> None:
     device = CraftyDevice(lambda: None, lambda: None)
     extended = await device.async_read_extended_diagnostics()
     assert set(extended.values()) == {None}
+
+
+async def test_battery_values_are_read_and_polled() -> None:
+    """Voltage and current follow every poll; the rest only a charging change."""
+    client = FakeBleakClient(crafty_plus_values())
+    device = await connect(client)
+    data = device.data
+    assert (data.battery_voltage, data.battery_current) == (4184, 757)
+    assert (data.charge_cycles, data.discharge_cycles) == (565, 195)
+    assert data.battery_health == 100
+
+    # Still charging: only the fast values are read again.
+    client.values[CHAR_BATTERY_VOLTAGE] = u16(4190)
+    client.values[CHAR_BATTERY_CURRENT] = u16(700)
+    client.values[CHAR_CHARGE_CYCLES] = u16(566)
+    await device.async_manual_update()
+    assert (data.battery_voltage, data.battery_current) == (4190, 700)
+    assert data.charge_cycles == 565
+
+    # Unplugged: the charging state flips, so the slow values follow.
+    client.values[CHAR_CHARGER_STATUS] = u16(0)
+    client.values[CHAR_BATTERY_FULL_CAPACITY] = u16(2970)
+    await device.async_manual_update()
+    assert data.charging is False
+    assert data.charge_cycles == 566
+    assert data.battery_health == 90
+
+
+async def test_battery_values_are_optional() -> None:
+    """A device that serves none of them still connects, with no values."""
+    chars = {
+        CHAR_BATTERY_VOLTAGE,
+        CHAR_BATTERY_CURRENT,
+        CHAR_BATTERY_FULL_CAPACITY,
+        CHAR_BATTERY_DESIGN_CAPACITY,
+        CHAR_CHARGE_CYCLES,
+        CHAR_DISCHARGE_CYCLES,
+    }
+    values = {k: v for k, v in crafty_plus_values().items() if k not in chars}
+    device = await connect(FakeBleakClient(values, missing=chars))
+    assert device.is_connected
+    assert device.data.battery_voltage is None
+    assert device.data.battery_health is None

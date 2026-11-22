@@ -93,10 +93,24 @@ async def test_sensors_and_binary_sensors(
     data.apply_status_words()
     data.boost_mode = True
     data.superboost_mode = False
+    data.battery_current = 757
+    data.battery_voltage = 4184
+    data.battery_full_capacity = 2970
+    data.battery_design_capacity = 3300
+    data.charge_cycles = 565
+    data.discharge_cycles = 195
     mock_volcano.data_updated()
     await hass.async_block_till_done()
 
     assert hass.states.get(get_entity_id(hass, "sensor", "battery")).state == "85"
+    for key, expected in (
+        ("battery_current", "757"),
+        ("battery_voltage", "4.184"),  # mV shown in V
+        ("battery_health", "90"),
+        ("charge_cycles", "565"),
+        ("discharge_cycles", "195"),
+    ):
+        assert hass.states.get(get_entity_id(hass, "sensor", key)).state == expected
     assert (
         hass.states.get(get_entity_id(hass, "sensor", "auto_off_countdown")).state
         == "90"
@@ -147,7 +161,7 @@ async def test_numbers(
     assert command in mock_volcano.commands
 
 
-@pytest.mark.parametrize("key", ["charge_led", "auto_ble_shutdown", "vibration"])
+@pytest.mark.parametrize("key", ["charge_led", "permanent_bluetooth", "vibration"])
 async def test_switches(
     hass: HomeAssistant,
     entity_registry_enabled_by_default: None,

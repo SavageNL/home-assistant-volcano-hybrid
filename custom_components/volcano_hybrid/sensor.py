@@ -15,6 +15,8 @@ from homeassistant.const import (
     PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     EntityCategory,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
@@ -225,6 +227,48 @@ SENSOR_DESCRIPTIONS: dict[str, VolcanoSensorEntityDescription] = {
         entity_registry_enabled_default=False,
         value_fn=format_register,
     ),
+    # The Crafty's battery values (CRAFTY_BLE_SPEC.md §4.4). Voltage and current
+    # change every poll, so they stay off unless wanted, to spare the recorder.
+    # The current is unsigned: it reads positive both charging and heating.
+    VolcanoSensor.BATTERY_CURRENT: VolcanoSensorEntityDescription(
+        key=VolcanoSensor.BATTERY_CURRENT,
+        translation_key=VolcanoSensor.BATTERY_CURRENT,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.MILLIAMPERE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
+    VolcanoSensor.BATTERY_VOLTAGE: VolcanoSensorEntityDescription(
+        key=VolcanoSensor.BATTERY_VOLTAGE,
+        translation_key=VolcanoSensor.BATTERY_VOLTAGE,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.MILLIVOLT,
+        suggested_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        suggested_display_precision=2,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
+    VolcanoSensor.BATTERY_HEALTH: VolcanoSensorEntityDescription(
+        key=VolcanoSensor.BATTERY_HEALTH,
+        translation_key=VolcanoSensor.BATTERY_HEALTH,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VolcanoSensor.CHARGE_CYCLES: VolcanoSensorEntityDescription(
+        key=VolcanoSensor.CHARGE_CYCLES,
+        translation_key=VolcanoSensor.CHARGE_CYCLES,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VolcanoSensor.DISCHARGE_CYCLES: VolcanoSensorEntityDescription(
+        key=VolcanoSensor.DISCHARGE_CYCLES,
+        translation_key=VolcanoSensor.DISCHARGE_CYCLES,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
     VolcanoSensor.HEATER_MODE: VolcanoSensorEntityDescription(
         key=VolcanoSensor.HEATER_MODE,
         translation_key=VolcanoSensor.HEATER_MODE,
@@ -274,6 +318,11 @@ SENSOR_KEYS: tuple[tuple[VolcanoSensor, bool], ...] = (
     (VolcanoSensor.SYSTEM_STATUS, False),
     (VolcanoSensor.BATTERY_STATUS1, False),
     (VolcanoSensor.BATTERY_STATUS2, False),
+    (VolcanoSensor.BATTERY_CURRENT, False),
+    (VolcanoSensor.BATTERY_VOLTAGE, False),
+    (VolcanoSensor.BATTERY_HEALTH, False),
+    (VolcanoSensor.CHARGE_CYCLES, False),
+    (VolcanoSensor.DISCHARGE_CYCLES, False),
     (VolcanoSensor.HEATER_MODE, False),
     (VolcanoSensor.CHARGING_TIME, False),
     (VolcanoSensor.COLOR, False),

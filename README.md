@@ -21,7 +21,7 @@ Install using HACS (click the button below if you have it installed), or downloa
 | Device | Tested on hardware | Notes |
 | --- | --- | --- |
 | Volcano Hybrid | yes | — |
-| Crafty+ | partly | reading confirmed from a user's diagnostics (firmware V03.25); control untested |
+| Crafty+ | yes, by a user | reading and every control confirmed by a user (firmware V03.25); the *Charging* sensor reads correctly |
 | Crafty | **no** | decoded from the vendor app; monitor-only below firmware V02.51 |
 | Venty | **no** | polled every second while connected |
 | Veazy | **no** | polled every second while connected |
@@ -78,7 +78,7 @@ Most of these are disabled by default; enable them under the device page in **Se
 
 ### Crafty / Crafty+
 
-Experimental. A Crafty+ has been seen connecting and reading correctly; control, and the original Crafty, are untested on hardware. The `climate` entity sets the target temperature and switches the heater; there is no fan, so no fan modes. Entities:
+A user has confirmed a Crafty+ reads and controls correctly (firmware V03.25); the original Crafty is untested on hardware. The `climate` entity sets the target temperature and switches the heater; there is no fan, so no fan modes. Entities:
 - Battery (sensor)
 - Auto off countdown (sensor)
 - Total heat time (sensor)
@@ -93,8 +93,9 @@ Experimental. A Crafty+ has been seen connecting and reading correctly; control,
 - Auto off time (configurable)
 - Vibration enabled (configurable)
 - Charge LED (configurable)
-- Automatic Bluetooth shutdown (configurable; see [Sleeping devices](#sleeping-devices))
+- Permanent Bluetooth (configurable; see [Sleeping devices](#sleeping-devices))
 - Find device (button, makes the device buzz)
+- Battery health, charge cycles and discharge cycles; battery voltage and battery current (disabled by default, they change every poll)
 - Status register 1/2, System status and Battery status 1/2 as hex, for diagnosing faults (see [the Crafty spec](CRAFTY_BLE_SPEC.md))
 - The device connected state, signal strength and connected address, the reconnect buttons and the auto-connect switch, as on the Volcano
 
@@ -156,7 +157,7 @@ You can control this behavior:
 
 ### Sleeping devices
 
-The portable devices (Crafty, Venty, Veazy) switch Bluetooth off when idle to save battery. Their entities show *unavailable* until the device wakes and advertises again, at which point the integration connects as usual. The *Automatic Bluetooth shutdown* setting (Crafty) and *Permanent Bluetooth* (Veazy) change that, at the cost of battery life.
+The portable devices (Crafty, Venty, Veazy) switch Bluetooth off when idle to save battery. Their entities show *unavailable* until the device wakes and advertises again, at which point the integration connects as usual. Turning on *Permanent Bluetooth* (Crafty, Veazy) keeps them reachable, at the cost of battery life.
 
 ### Configuration
 

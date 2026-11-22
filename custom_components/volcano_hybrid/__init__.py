@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_MODEL, DOMAIN
 from .coordinator import VolcanoHybridConfigEntry, VolcanoHybridCoordinator
@@ -33,6 +34,7 @@ async def async_setup_entry(
         family=DeviceFamily(entry.data[CONF_MODEL]),
     )
     entry.runtime_data = coordinator
+    _async_migrate_unique_ids(hass, entry)
 
     # Register the advertisement callback without blocking on a connect. The
     # connect below can stall at cold boot until the Bluetooth transport is
@@ -50,6 +52,33 @@ async def async_setup_entry(
         hass, coordinator.async_refresh(), f"{DOMAIN}_first_refresh"
     )
     return True
+
+
+# Entity keys that were renamed, old -> new. Up to 1.2.0-alpha1 the Crafty's
+# PRJSTAT2 bit 12 switch was called "Automatic Bluetooth shutdown" after the
+# vendor app's mask name, though the app labels it "Permanent Bluetooth" and a
+# set bit keeps Bluetooth on (#108).
+RENAMED_KEYS: dict[str, str] = {"auto_ble_shutdown": "permanent_bluetooth"}
+
+
+@callback
+def _async_migrate_unique_ids(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """
+    Move entities of renamed keys to their new unique ID.
+
+    The entity ID, name overrides and history stay with the registry entry, so
+    automations keep working. An entry is left alone if the new unique ID is
+    already taken, which only happens after a downgrade and re-upgrade.
+    """
+    registry = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        address, _, key = entity.unique_id.rpartition("-")
+        if (new_key := RENAMED_KEYS.get(key)) is None:
+            continue
+        new_unique_id = f"{address}-{new_key}"
+        if registry.async_get_entity_id(entity.domain, DOMAIN, new_unique_id):
+            continue
+        registry.async_update_entity(entity.entity_id, new_unique_id=new_unique_id)
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

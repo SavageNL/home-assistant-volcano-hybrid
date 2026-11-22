@@ -467,10 +467,6 @@ class StorzBickelDevice(VolcanoHybridDataStatusProvider):
         """Enable or disable the charge LED (Crafty)."""
         raise self._unsupported()
 
-    async def async_set_auto_ble_shutdown(self, on: bool) -> bool:
-        """Enable or disable automatic Bluetooth shutdown (Crafty)."""
-        raise self._unsupported()
-
     async def async_find_device(self) -> bool:
         """Make the device signal so it can be found (Crafty+, Venty, Veazy)."""
         raise self._unsupported()
@@ -517,7 +513,7 @@ class StorzBickelDevice(VolcanoHybridDataStatusProvider):
         raise self._unsupported()
 
     async def async_set_permanent_bluetooth(self, on: bool) -> bool:
-        """Keep Bluetooth on while asleep (Veazy)."""
+        """Keep Bluetooth on while asleep (Crafty, Veazy)."""
         raise self._unsupported()
 
     async def async_set_brightness(self, brightness: int) -> bool:

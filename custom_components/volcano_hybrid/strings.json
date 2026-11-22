@@ -219,6 +219,21 @@
       "charging_time": {
         "name": "Total charging time"
       },
+      "battery_current": {
+        "name": "Battery current"
+      },
+      "battery_voltage": {
+        "name": "Battery voltage"
+      },
+      "battery_health": {
+        "name": "Battery health"
+      },
+      "charge_cycles": {
+        "name": "Charge cycles"
+      },
+      "discharge_cycles": {
+        "name": "Discharge cycles"
+      },
       "color": {
         "name": "Colour",
         "state": {
@@ -244,9 +259,6 @@
       },
       "charge_led": {
         "name": "Charge LED"
-      },
-      "auto_ble_shutdown": {
-        "name": "Automatic Bluetooth shutdown"
       },
       "charge_optimization": {
         "name": "Charge optimization"

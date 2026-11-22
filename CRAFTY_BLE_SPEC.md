@@ -28,7 +28,7 @@ nothing more.
 | Advertised services | `00000001-…`, `00000002-…`, `00000003-…` on the Crafty base (§1.1) — CONFIRMED (the app also filters on these) |
 | Manufacturer ID | not used by the app for discovery. Whether the Crafty advertises `1736` like the Volcano is **SPECULATIVE**; do not rely on it |
 | Connections | one central at a time (STRONG — same BLE module family as the Volcano) |
-| Power | battery. The device switches Bluetooth off on its own after a while unless *auto BLE shutdown* (§4.2, PRJSTAT2 bit 12) is disabled — CONFIRMED that the setting exists and that the app warns it "causes faster battery drain" |
+| Power | battery. The device switches Bluetooth off on its own after a while unless *Permanent Bluetooth* (§4.2, PRJSTAT2 bit 12) is set — CONFIRMED: the app's toggle of that name drives the bit, and its *Analysis* warns that a set bit keeps Bluetooth "active at all time", draining the battery faster |
 
 The last row is the important difference from the Volcano for a Home Assistant integration:
 **a Crafty is mostly unreachable.** It only advertises when awake, and it goes back to
@@ -159,7 +159,15 @@ the register after every write to refresh its copy.
 | 1 | `0x0002` | Charge LED **disabled** | 1 = off | CONFIRMED |
 | 2 | `0x0004` | **Setpoint reached** | 1 = at temperature | CONFIRMED (read-only in practice) |
 | 3 | `0x0008` | "Find my Crafty" — the device buzzes for 30 s | 1 = signalling; clears itself | CONFIRMED |
-| 12 | `0x1000` | Automatic BLE shutdown enabled | 1 = device turns BT off when idle | CONFIRMED |
+| 12 | `0x1000` | **Permanent Bluetooth** — Bluetooth stays on while the device is idle or off | 1 = BT stays on | CONFIRMED |
+
+Bit 12's mask is called `MASK_PRJSTAT2_ENABLE_AUTOBLESHUTDOWN` in the app, which reads as the
+opposite of what it does. Everything else in the app agrees on the polarity: the toggle it
+checks while the bit is set is labelled *Permanent Bluetooth* ("Keeps your device ready to
+connect at any time"), and the *Analysis* text for a set bit is "Automatic shutdown disabled:
+Bluetooth is active at all time". A Crafty+ owner confirmed it on hardware (#108). Up to
+1.2.0-alpha1 the integration followed the mask name and called its switch *Automatic Bluetooth
+shutdown*, with the meaning inverted; the bit it wrote was always the right one.
 
 Bit 2 is the device's own "ready" signal, the equivalent of Volcano PRJSTAT1 bit 10. The app
 colours the temperature green on it and shows the auto-off countdown only while it is set.
@@ -203,20 +211,20 @@ device confirms it; all are uint16 little-endian like the rest of the GATT table
 
 | Char | Community name | Unit / encoding (as the clients show it) | Used by the integration |
 |---|---|---|---|
-| `000000a3` | Charger status | 0 = unplugged, **2 = charging**, any other non-zero = plugged in, not charging | yes — *Charging* entity, read on connect and on every fallback poll |
+| `000000a3` | Charger status | 0 = unplugged, **2 = charging**, any other non-zero = plugged in, not charging. 0 and 2 seen on a Crafty+ (§9); the "plugged in, not charging" values are still unseen | yes — *Charging* entity, read on connect and on every fallback poll |
 | `00000013` | Operating time battery | hours ×10 | diagnostics only |
-| `000000b3` | Battery voltage | mV | diagnostics only |
+| `000000b3` | Battery voltage | mV | yes — *Battery voltage* entity, read on connect and on every fallback poll |
 | `000000c3` | Mains (charger) voltage | mV | diagnostics only |
 | `000000d3` | Heater voltage | mV | diagnostics only |
-| `000000e3` | Battery current | mA (VapeLog treats ≥ 5000 as "heating") | diagnostics only |
+| `000000e3` | Battery current | mA, unsigned (VapeLog treats ≥ 5000 as "heating", so it reads positive both ways) | yes — *Battery current* entity, read on connect and on every fallback poll |
 | `000000f3` | PT1000 temperature | °C ×10 | diagnostics only |
 | `00000103` | PT1000 temperature, adjusted | °C ×10 | diagnostics only |
 | `00000113` | Battery temperature | °C ×10 | diagnostics only |
 | `00000123` / `00000133` | Battery temperature min / max | °C ×10 | diagnostics only |
-| `00000143` | Battery full-charge capacity | mAh | diagnostics only |
+| `00000143` | Battery full-charge capacity | mAh | yes — *Battery health* (÷ design capacity), read on connect and whenever the charging state changes |
 | `00000153` | Battery remaining capacity | mAh | diagnostics only |
-| `00000163` / `00000173` | Discharge / charge cycles | count | diagnostics only |
-| `00000183` | Battery design capacity | mAh | diagnostics only |
+| `00000163` / `00000173` | Discharge / charge cycles | count | yes — *Discharge cycles* / *Charge cycles* entities, read on connect and whenever the charging state changes |
+| `00000183` | Battery design capacity | mAh. Advertised as writable; the integration never writes it | yes — *Battery health*, read on connect and whenever the charging state changes |
 | `00000043` | PCB version | raw | diagnostics only |
 
 How the charger status updates is not known. J-Cat's client re-reads it whenever battery status
@@ -232,11 +240,14 @@ Both clients also list `00000033` (hardware ID), `00000053` (hardware serial) an
 (Bluetooth address); the integration reads none of them — the address is already known and the
 serials would only need redacting.
 
-Which of these the Crafty+ serves is the open question: the integration reads the
-diagnostics-only rows when a diagnostics download is requested (`extended` in the download,
-null where the device does not serve one), so one download from a plugged-in and one from an
-unplugged device settle the table. Battery health (full-charge ÷ design capacity), cycle count
-and battery temperature are the candidates for entities once confirmed.
+A Crafty+ on `V03.25` serves every row of this table (§9.2): each read returned a value, and
+the values move the way the units above predict when the charger is plugged in. That makes the
+units STRONG for that firmware rather than CONFIRMED — two snapshots fit them, but no reading was
+checked against an independent instrument. The battery voltage and current, battery health
+(full-charge ÷ design capacity) and both cycle counters are exposed as entities; battery
+temperature is the remaining candidate. What separates the two cycle counters is not known:
+565 charge against 195 discharge cycles suggests one counts charging sessions and the other
+full-equivalent discharges, but nothing documents either.
 
 ---
 
@@ -339,6 +350,8 @@ Undecoded bits in PRJSTAT1/2 and the three status words are exactly that: undeco
 
 ## 9. Observed on hardware
 
+### 9.1 First download
+
 One diagnostics download, from a user's Crafty+ (issue #108, Home Assistant 2026.11.1,
 integration 1.1.0), firmware `V03.25`, BLE firmware `V2.0.3`. The heater was off, battery 96 %;
 whether it was plugged in is not known.
@@ -351,7 +364,7 @@ whether it was plugged in is not known.
 | Auto-off setting / countdown | 300 / 260 s | the countdown reads non-zero with the heater off; what it counts then is unknown |
 | Lifetime heat | 157 h 57 min | |
 | PRJSTAT1 | `0x0400` | bit 10 set with the heater off and not at temperature — **undecoded** |
-| PRJSTAT2 | `0x0000` | vibration on, charge LED on, auto BLE shutdown off |
+| PRJSTAT2 | `0x0000` | vibration on, charge LED on, permanent Bluetooth off |
 | System status | `0x2405` | bits 0, 2, 10, 13; none in an error mask |
 | Battery status 1 | `0x8084` | bits 2, 7, 15; none in a warning or error mask |
 | Battery status 2 | `0x2000` | bit 13 |
@@ -360,3 +373,35 @@ What this confirms: the connect sequence of §7, every characteristic the integr
 a ≥ V02.51 device (including the optional ones), the firmware-string parsing and the Crafty+
 detection. What it does not: any write — heater, target, settings — and any decoding beyond the
 app's masks. The status words are recorded so the next download can be compared against them.
+
+The same owner later confirmed that every control works from Home Assistant on this device:
+heater, target temperature, LED brightness, vibration, charge LED, auto-off and the bit-12
+switch, which behaves as *Permanent Bluetooth* (§4.2).
+
+### 9.2 Plugged in and unplugged
+
+Two downloads from the same Crafty+ (issue #109, integration 1.2.0-alpha1), minutes apart,
+heater off, one unplugged and one charging. The PRJSTAT and status words were identical in
+both (PRJSTAT1 `0x0400`, PRJSTAT2 `0x0000`, system status `0x2404`, battery status 1 `0x0010`,
+battery status 2 `0x0000`), so none of their bits tracks the charger.
+
+| Value (§4.4) | Unplugged | Charging | Reading |
+|---|---|---|---|
+| Charger status `000000a3` | 0 | **2** | the *Charging* entity's mapping holds |
+| Battery level (`00000041`) | 99 % | 94 % | a later level while charging is just the second snapshot |
+| Battery voltage | 4098 | 4184 | mV, a Li-ion cell near full; rises under charge |
+| Mains voltage | 77 | 4863 | mV: noise unplugged, a 5 V USB supply plugged in |
+| Heater voltage | 4095 | 4182 | mV, tracks the battery voltage with the heater off |
+| Battery current | 0 | 757 | mA into the battery; unsigned, so the direction is not known |
+| PT1000 / adjusted | 208 / 195 | 209 / 196 | °C ×10 — 20.8 / 19.5 °C, room temperature |
+| Battery temperature | 194 | 194 | °C ×10 — 19.4 °C |
+| Battery temperature min / max | 97 / 598 | 97 / 598 | °C ×10 — lifetime extremes 9.7 / 59.8 °C |
+| Full-charge / design capacity | 3300 / 3300 | 3300 / 3300 | mAh |
+| Remaining capacity | 3299 | 3133 | mAh — 99.97 % and 94.9 % of full, matching the battery level |
+| Discharge / charge cycles | 195 / 565 | 195 / 565 | counts |
+| Operating time battery | 746 | 746 | hours ×10 per the clients; unverified |
+| PCB version | 12340 | 12340 | `0x3034`, ASCII `"40"` read little-endian — **undecoded** |
+
+The remaining capacity agreeing with the reported battery level in both snapshots is the
+strongest single cross-check of the units. The mains voltage is the cleanest "plugged in"
+signal after the charger status itself.

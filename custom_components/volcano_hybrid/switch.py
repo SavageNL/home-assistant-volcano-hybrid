@@ -56,13 +56,6 @@ SENSOR_DESCRIPTIONS: dict[str, SwitchEntityDescription] = {
         entity_category=EntityCategory.CONFIG,
         entity_registry_enabled_default=False,
     ),
-    VolcanoSensor.AUTO_BLE_SHUTDOWN: SwitchEntityDescription(
-        key=VolcanoSensor.AUTO_BLE_SHUTDOWN,
-        translation_key=VolcanoSensor.AUTO_BLE_SHUTDOWN,
-        device_class=SwitchDeviceClass.SWITCH,
-        entity_category=EntityCategory.CONFIG,
-        entity_registry_enabled_default=False,
-    ),
     VolcanoSensor.CHARGE_OPTIMIZATION: SwitchEntityDescription(
         key=VolcanoSensor.CHARGE_OPTIMIZATION,
         translation_key=VolcanoSensor.CHARGE_OPTIMIZATION,
@@ -106,7 +99,6 @@ SWITCH_KEYS: tuple[VolcanoSensor, ...] = (
     VolcanoSensor.DISPLAY_ON_COOLING,
     VolcanoSensor.VIBRATION,
     VolcanoSensor.CHARGE_LED,
-    VolcanoSensor.AUTO_BLE_SHUTDOWN,
     VolcanoSensor.CHARGE_OPTIMIZATION,
     VolcanoSensor.CHARGE_LIMIT,
     VolcanoSensor.BOOST_VISUALIZATION,

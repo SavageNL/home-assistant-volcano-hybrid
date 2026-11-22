@@ -19,8 +19,13 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 
 - Crafty / Crafty+: a **Charging** binary sensor (#109). The vendor app has no
   charging indicator, so this reads a characteristic only older community
-  apps use; it is experimental until owners confirm it. It updates within
+  apps use. It updates within
   about 10 seconds of plugging in or out.
+- Crafty / Crafty+: **Battery health** (full-charge capacity against the
+  design capacity), **Charge cycles** and **Discharge cycles** sensors, and
+  **Battery voltage** and **Battery current** sensors that are disabled by
+  default. The current reads positive both while charging and while heating.
+  A device that does not serve one of these values shows it as unknown.
 - Crafty / Crafty+: the diagnostics download now also reads the battery and
   power values those community apps list (voltages, current, capacity, charge
   cycles, battery temperature), raw, under `extended`. Attaching one taken while
@@ -29,6 +34,15 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
   the device offers, with what each supports (read, write, notify), for every
   device family. It shows what the integration could subscribe to instead of
   polling, and anything the protocol notes have not documented yet.
+
+### Fixed
+
+- Crafty / Crafty+: the switch called **Automatic Bluetooth shutdown** is now
+  **Permanent Bluetooth**, as in the official app (#108). It always did what
+  the new name says: on keeps Bluetooth on, off lets the device switch it off
+  when idle. The old name described the opposite. Your entity ID, history and
+  automations are kept; only the displayed name changes, unless you renamed it
+  yourself.
 
 ## [1.1.0] - 2026-10-19
 

@@ -60,7 +60,7 @@ GOLDEN_ENTITIES: dict[DeviceFamily, dict[str, set[str]]] = {
     DeviceFamily.CRAFTY: {
         "climate": {"volcano"},
         "number": {"boost_temp", "led_brightness", "auto_off_seconds"},
-        "switch": {"vibration", "charge_led", "auto_ble_shutdown", "auto_connect"},
+        "switch": {"vibration", "charge_led", "permanent_bluetooth", "auto_connect"},
         "sensor": {
             "battery",
             "auto_off_countdown",
@@ -72,6 +72,11 @@ GOLDEN_ENTITIES: dict[DeviceFamily, dict[str, set[str]]] = {
             "system_status",
             "battery_status1",
             "battery_status2",
+            "battery_current",
+            "battery_voltage",
+            "battery_health",
+            "charge_cycles",
+            "discharge_cycles",
         },
         "binary_sensor": {
             "at_temperature",

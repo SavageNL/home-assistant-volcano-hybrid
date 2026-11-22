@@ -112,6 +112,15 @@
       "charging_time": {
         "default": "mdi:battery-clock"
       },
+      "battery_health": {
+        "default": "mdi:battery-heart-variant"
+      },
+      "charge_cycles": {
+        "default": "mdi:battery-sync"
+      },
+      "discharge_cycles": {
+        "default": "mdi:battery-sync-outline"
+      },
       "color": {
         "default": "mdi:palette"
       }
@@ -131,9 +140,6 @@
       },
       "charge_led": {
         "default": "mdi:led-on"
-      },
-      "auto_ble_shutdown": {
-        "default": "mdi:bluetooth-off"
       },
       "charge_optimization": {
         "default": "mdi:battery-heart-variant"

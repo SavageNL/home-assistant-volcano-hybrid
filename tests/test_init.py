@@ -6,9 +6,11 @@ import asyncio
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.volcano_hybrid import (
@@ -16,6 +18,7 @@ from custom_components.volcano_hybrid import (
     async_remove_config_entry_device,
 )
 from custom_components.volcano_hybrid.const import CONF_MODEL, DOMAIN
+from custom_components.volcano_hybrid.volcano_ble import DeviceFamily
 
 from . import (
     VOLCANO_ADDRESS,
@@ -231,3 +234,72 @@ async def test_entry_from_a_newer_version_is_not_migrated(
     # Home Assistant refuses it before asking; the migration refuses it too.
     assert not await async_migrate_entry(hass, entry)
     assert entry.version == 2
+
+
+CRAFTY = pytest.mark.parametrize(
+    "device_family", [DeviceFamily.CRAFTY], indirect=True, ids=str
+)
+OLD_BT_ID = "switch.crafty_automatic_bluetooth_shutdown"
+
+
+def _register(
+    hass: HomeAssistant, entry: MockConfigEntry, key: str, object_id: str
+) -> None:
+    er.async_get(hass).async_get_or_create(
+        "switch",
+        DOMAIN,
+        f"{VOLCANO_ADDRESS}-{key}",
+        config_entry=entry,
+        suggested_object_id=object_id,
+    )
+
+
+@CRAFTY
+async def test_renamed_key_keeps_its_entity(
+    hass: HomeAssistant,
+    mock_volcano: FakeVolcanoBLE,
+    enable_bluetooth: None,
+    device_family: DeviceFamily,
+) -> None:
+    """The Crafty's bit-12 switch moves to its new key, keeping its entity ID."""
+    entry = make_config_entry(device_family)
+    entry.add_to_hass(hass)
+    _register(hass, entry, "auto_ble_shutdown", "crafty_automatic_bluetooth_shutdown")
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    moved = registry.async_get(OLD_BT_ID)
+    assert moved is not None
+    assert moved.unique_id == f"{VOLCANO_ADDRESS}-permanent_bluetooth"
+    assert not registry.async_get_entity_id(
+        "switch", DOMAIN, f"{VOLCANO_ADDRESS}-auto_ble_shutdown"
+    )
+    assert get_entity_id(hass, "switch", "permanent_bluetooth") == OLD_BT_ID
+
+
+@CRAFTY
+async def test_renamed_key_does_not_overwrite_a_newer_entity(
+    hass: HomeAssistant,
+    mock_volcano: FakeVolcanoBLE,
+    enable_bluetooth: None,
+    device_family: DeviceFamily,
+) -> None:
+    """When both IDs exist (downgrade, then upgrade) the old one is left alone."""
+    entry = make_config_entry(device_family)
+    entry.add_to_hass(hass)
+    _register(hass, entry, "auto_ble_shutdown", "crafty_automatic_bluetooth_shutdown")
+    _register(hass, entry, "permanent_bluetooth", "crafty_permanent_bluetooth")
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    old = registry.async_get(OLD_BT_ID)
+    assert old is not None
+    assert old.unique_id == f"{VOLCANO_ADDRESS}-auto_ble_shutdown"
+    assert (
+        get_entity_id(hass, "switch", "permanent_bluetooth")
+        == "switch.crafty_permanent_bluetooth"
+    )

@@ -85,13 +85,13 @@ def test_prj2_polarity() -> None:
     assert data.charge_led is False
     assert data.at_temperature is True
     assert data.find_mode is False
-    assert data.auto_ble_shutdown is False
+    assert data.permanent_bluetooth is False
 
     data.apply_prj2(0x1008)
     assert data.vibration is True
     assert data.charge_led is True
     assert data.find_mode is True
-    assert data.auto_ble_shutdown is True
+    assert data.permanent_bluetooth is True
 
 
 def test_status_words_raise_error() -> None:
@@ -148,3 +148,24 @@ def test_charging_is_charger_status_two(
     data = _data()
     data.charger_status = status
     assert data.charging is charging
+
+
+@pytest.mark.parametrize(
+    ("full", "design", "health"),
+    [
+        (None, 3300, None),
+        (3300, None, None),
+        (3300, 0, None),
+        (3300, 3300, 100),
+        (2970, 3300, 90),
+        (3400, 3300, 103),
+    ],
+)
+def test_battery_health_is_full_over_design(
+    full: int | None, design: int | None, health: int | None
+) -> None:
+    """Full-charge over design capacity, unknown without both; not clamped."""
+    data = _data()
+    data.battery_full_capacity = full
+    data.battery_design_capacity = design
+    assert data.battery_health == health

@@ -230,10 +230,6 @@ class FakeDevice(VolcanoHybridDataStatusProvider):
         """Record the command."""
         return self._command("charge_led", on)
 
-    async def async_set_auto_ble_shutdown(self, on: bool) -> bool:
-        """Record the command."""
-        return self._command("auto_ble_shutdown", on)
-
     async def async_find_device(self) -> bool:
         """Record the command."""
         return self._command("find_device", None)

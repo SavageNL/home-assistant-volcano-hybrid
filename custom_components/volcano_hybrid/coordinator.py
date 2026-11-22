@@ -323,10 +323,6 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[DeviceData]):
         """Enable or disable the charge LED."""
         await self._async_command(self._device.async_set_charge_led(on))
 
-    async def set_auto_ble_shutdown(self, on: bool) -> None:
-        """Enable or disable automatic Bluetooth shutdown."""
-        await self._async_command(self._device.async_set_auto_ble_shutdown(on))
-
     async def find_device(self) -> None:
         """Make the device signal so it can be found."""
         await self._async_command(self._device.async_find_device())

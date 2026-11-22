@@ -10,8 +10,8 @@ from .const import DeviceFamily
 from .crafty_data import (
     MASK_PRJSTAT2_DISABLE_CHARGELED,
     MASK_PRJSTAT2_DISABLE_VIBRATION,
-    MASK_PRJSTAT2_ENABLE_AUTOBLESHUTDOWN,
     MASK_PRJSTAT2_FIND_DEVICE,
+    MASK_PRJSTAT2_PERMANENT_BLUETOOTH,
     CraftyData,
     decode_target,
 )
@@ -54,24 +54,44 @@ CHAR_USE_MINUTES = "000001e3" + _BASE
 # Service 3, not used by the vendor app: only community clients read these
 # (spec §4.4, SPECULATIVE). Every one is read as optional.
 CHAR_CHARGER_STATUS = "000000a3" + _BASE
+CHAR_BATTERY_VOLTAGE = "000000b3" + _BASE
+CHAR_BATTERY_CURRENT = "000000e3" + _BASE
+CHAR_BATTERY_FULL_CAPACITY = "00000143" + _BASE
+CHAR_DISCHARGE_CYCLES = "00000163" + _BASE
+CHAR_CHARGE_CYCLES = "00000173" + _BASE
+CHAR_BATTERY_DESIGN_CAPACITY = "00000183" + _BASE
+# Battery values shown as entities (spec §4.4, units STRONG on V03.25), keyed by
+# the data attribute each is stored in. The first two move while charging or
+# heating and are read on every fallback poll; the rest barely change and are
+# read on connect and whenever the charging state flips.
+BATTERY_FAST: dict[str, str] = {
+    "battery_voltage": CHAR_BATTERY_VOLTAGE,
+    "battery_current": CHAR_BATTERY_CURRENT,
+}
+BATTERY_SLOW: dict[str, str] = {
+    "battery_full_capacity": CHAR_BATTERY_FULL_CAPACITY,
+    "battery_design_capacity": CHAR_BATTERY_DESIGN_CAPACITY,
+    "charge_cycles": CHAR_CHARGE_CYCLES,
+    "discharge_cycles": CHAR_DISCHARGE_CYCLES,
+}
 # Read only when a diagnostics download asks for them, keyed by the name the
 # diagnostics report them under. Raw uint16, undecoded on purpose.
 EXTENDED_DIAGNOSTICS: dict[str, str] = {
     "battery_operating_time": "00000013" + _BASE,
-    "battery_voltage": "000000b3" + _BASE,
+    "battery_voltage": CHAR_BATTERY_VOLTAGE,
     "mains_voltage": "000000c3" + _BASE,
     "heater_voltage": "000000d3" + _BASE,
-    "battery_current": "000000e3" + _BASE,
+    "battery_current": CHAR_BATTERY_CURRENT,
     "pt1000_temp": "000000f3" + _BASE,
     "pt1000_temp_adjusted": "00000103" + _BASE,
     "battery_temp": "00000113" + _BASE,
     "battery_temp_min": "00000123" + _BASE,
     "battery_temp_max": "00000133" + _BASE,
-    "battery_full_capacity": "00000143" + _BASE,
+    "battery_full_capacity": CHAR_BATTERY_FULL_CAPACITY,
     "battery_remaining_capacity": "00000153" + _BASE,
-    "discharge_cycles": "00000163" + _BASE,
-    "charge_cycles": "00000173" + _BASE,
-    "battery_design_capacity": "00000183" + _BASE,
+    "discharge_cycles": CHAR_DISCHARGE_CYCLES,
+    "charge_cycles": CHAR_CHARGE_CYCLES,
+    "battery_design_capacity": CHAR_BATTERY_DESIGN_CAPACITY,
     "pcb_version": "00000043" + _BASE,
 }
 
@@ -134,6 +154,7 @@ class CraftyDevice(StorzBickelDevice):
                 SERVICE_STATUS, CHAR_PRJSTAT2, self._parse_prjstat2, subscribe=True
             ),
             self._async_read_charger_status(),
+            self._async_read_battery(slow=True),
         ]
         # Only firmware known to be V02.51 or newer has the settings side. A
         # string that does not parse is treated like old firmware, as the
@@ -180,12 +201,28 @@ class CraftyDevice(StorzBickelDevice):
         )
         # Not known to notify (the community clients poll it), so the
         # fallback poll is what keeps the charging state current.
+        was_charging = self.data.charging
         await self._async_read_charger_status()
+        await self._async_read_battery(slow=self.data.charging != was_charging)
 
     async def _async_read_charger_status(self) -> None:
         await self._async_read_optional(
             SERVICE_STATUS, CHAR_CHARGER_STATUS, self._parse_charger_status
         )
+
+    async def _async_read_battery(self, *, slow: bool) -> None:
+        """Read the values behind the battery entities (spec §4.4)."""
+        chars = {**BATTERY_FAST, **BATTERY_SLOW} if slow else BATTERY_FAST
+        for attribute, uuid in chars.items():
+            await self._async_read_optional(
+                SERVICE_STATUS, uuid, self._store_u16(attribute)
+            )
+
+    def _store_u16(self, attribute: str) -> Callable[[bytearray], None]:
+        def _parse(data: bytearray) -> None:
+            setattr(self.data, attribute, _u16(data))
+
+        return _parse
 
     async def async_read_extended_diagnostics(self) -> dict[str, int | None]:
         """
@@ -368,10 +405,10 @@ class CraftyDevice(StorzBickelDevice):
             MASK_PRJSTAT2_DISABLE_CHARGELED, set_bit=not on
         )
 
-    async def async_set_auto_ble_shutdown(self, on: bool) -> bool:
-        """Bit 12 enables the automatic Bluetooth shutdown."""
+    async def async_set_permanent_bluetooth(self, on: bool) -> bool:
+        """Bit 12 keeps Bluetooth on while the device sleeps."""
         return await self._async_change_prjstat2(
-            MASK_PRJSTAT2_ENABLE_AUTOBLESHUTDOWN, set_bit=on
+            MASK_PRJSTAT2_PERMANENT_BLUETOOTH, set_bit=on
         )
 
     async def async_find_device(self) -> bool:
