@@ -4,8 +4,19 @@ wait_for_temperature:
       integration: volcano_hybrid
       domain: climate
   fields:
+    temperature:
+      selector:
+        number:
+          min: 0
+          max: 500
+          step: 1
+          mode: box
+    turn_on:
+      default: false
+      selector:
+        boolean:
     tolerance:
-      default: 1
+      default: 0
       selector:
         number:
           min: 0

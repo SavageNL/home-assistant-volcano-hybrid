@@ -82,6 +82,16 @@ WAIT_DISCONNECTED = "disconnected"
 WAIT_HEATER_OFF = "heater_off"
 WAIT_TARGET_CHANGED = "target_changed"
 
+# How long a condition has to last before it ends a wait, in seconds. A Volcano
+# switching on often reports its heater off for up to a few seconds, some
+# 25-40 s in; and a connection can drop for 5-10 s while the device carries on
+# heating. Neither lasts as long as its grace; a real switch-off or a lost
+# device does.
+WAIT_GRACE = {
+    WAIT_HEATER_OFF: 15.0,
+    WAIT_DISCONNECTED: 30.0,
+}
+
 type VolcanoHybridConfigEntry = ConfigEntry[VolcanoHybridCoordinator]
 
 
@@ -348,38 +358,72 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[DeviceData]):
         """
         Wait until the current temperature reaches the target, less a tolerance.
 
-        Raises TemperatureWaitError as soon as the target can no longer be
-        reached the way it was asked for: the device disconnects, the heater is
-        switched off, or someone changes the target in the meantime. A target
+        Raises TemperatureWaitError once the target can no longer be reached
+        the way it was asked for: someone changes the target, or the heater is
+        off or the device disconnected for longer than its WAIT_GRACE. A target
         below the current temperature counts as reached; this never waits for
         the device to cool down.
         """
         target = self.data.set_temp_state
         if target is None:
             raise TemperatureWaitError(WAIT_DISCONNECTED)
+        loop = asyncio.get_running_loop()
+        # When each blocking condition was first seen, so a short blip does not
+        # end the wait: a heater that reads off for a second while it is
+        # switching on, or a connection that drops and comes straight back.
+        since: dict[str, float] = {}
         updated = asyncio.Event()
         remove_listener = self.async_add_listener(updated.set)
         try:
             async with asyncio.timeout(max_wait):
-                while not self._temperature_reached(target, tolerance):
+                while True:
                     updated.clear()
-                    await updated.wait()
+                    wake = self._wait_step(target, tolerance, since, loop.time())
+                    if wake == 0:
+                        return
+                    try:
+                        async with asyncio.timeout(wake):
+                            await updated.wait()
+                    except TimeoutError:
+                        # A grace period ran out; the next step decides.
+                        pass
         except TimeoutError as err:
             raise TemperatureWaitError(WAIT_TIMEOUT) from err
         finally:
             remove_listener()
 
-    def _temperature_reached(self, target: int, tolerance: float) -> bool:
-        """Whether the wait is over; raises when it can no longer succeed."""
+    def _wait_step(
+        self, target: int, tolerance: float, since: dict[str, float], now: float
+    ) -> float | None:
+        """
+        Check the wait once.
+
+        Returns 0 when the temperature is reached, otherwise how long to sleep
+        at most before checking again (None: until the next update). Raises
+        TemperatureWaitError once the target can no longer be reached.
+        """
         data = self.data
-        if not self._device.is_connected:
-            raise TemperatureWaitError(WAIT_DISCONNECTED)
-        if data.heater_state is False:
-            raise TemperatureWaitError(WAIT_HEATER_OFF)
-        if data.set_temp_state != target:
+        if data.set_temp_state not in (None, target):
             raise TemperatureWaitError(WAIT_TARGET_CHANGED)
+
+        blocking = {
+            WAIT_DISCONNECTED: not self._device.is_connected,
+            WAIT_HEATER_OFF: data.heater_state is False,
+        }
+        wake: float | None = None
+        for reason, active in blocking.items():
+            if not active:
+                since.pop(reason, None)
+                continue
+            remaining = WAIT_GRACE[reason] - (now - since.setdefault(reason, now))
+            if remaining <= 0:
+                raise TemperatureWaitError(reason)
+            wake = remaining if wake is None else min(wake, remaining)
+        if wake is not None:
+            return wake
+
         current = data.current_temp
-        return current is not None and current >= target - tolerance
+        return 0 if current is not None and current >= target - tolerance else None
 
     async def set_showing_celsius(self, on: bool) -> None:
         """Set the toggle for showing Celsius."""

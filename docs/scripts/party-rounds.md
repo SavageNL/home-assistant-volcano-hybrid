@@ -73,21 +73,13 @@ Bags for a group at one temperature: heats up, gives you time to fit the first b
           target: >-
             {{ ((temperature | default(190) | float * 9 / 5 + 32) | round(1)) if fahrenheit
             else temperature | default(190) | float }}
-          margin: "{{ 1.8 if fahrenheit else 1 }}"
-      - action: climate.set_temperature
-        data:
-          temperature: "{{ target }}"
-        target:
-          entity_id: "{{ volcano_entity }}"
-      - action: climate.turn_on
-        target:
-          entity_id: "{{ volcano_entity }}"
-      - alias: Wait for heatup
+      - alias: Heat up
         action: volcano_hybrid.wait_for_temperature
         target:
           entity_id: "{{ volcano_entity }}"
         data:
-          tolerance: "{{ margin }}"
+          temperature: "{{ target }}"
+          turn_on: true
         response_variable: heatup
       - if: "{{ not heatup[volcano_entity].reached }}"
         then:

@@ -309,16 +309,27 @@
     },
     "wait_target_changed": {
       "message": "The target temperature changed before the device reached it"
+    },
+    "temperature_out_of_range": {
+      "message": "{temperature} {unit} is outside the device's range of {min} to {max} {unit}"
     }
   },
   "services": {
     "wait_for_temperature": {
       "name": "Wait for temperature",
-      "description": "Waits until the device has heated up to its current target temperature. Ends with an error, or with `reached: false` in the response, when the device disconnects, the heater is switched off, the target is changed or the timeout passes.",
+      "description": "Optionally sets the target temperature and switches the heater on, then waits until the device has heated up to its target. Ends with an error, or with `reached: false` in the response, when the target is changed, the heater stays off or the device stays disconnected, or the timeout passes.",
       "fields": {
+        "temperature": {
+          "name": "Temperature",
+          "description": "Set this target first, in your temperature unit. Leave empty to wait for the current target."
+        },
+        "turn_on": {
+          "name": "Turn on",
+          "description": "Switch the heater on first if it is off."
+        },
         "tolerance": {
           "name": "Tolerance",
-          "description": "How far below the target still counts as reached, in your temperature unit. The device often settles a degree under its target."
+          "description": "How far below the target still counts as reached, in your temperature unit."
         },
         "timeout": {
           "name": "Timeout",

@@ -191,8 +191,11 @@ class FakeDevice(VolcanoHybridDataStatusProvider):
         return self._command("heater", on)
 
     async def async_set_target_temperature(self, target: float) -> bool:
-        """Set the target temperature."""
-        return self._command("target_temperature", target)
+        """Set the target temperature, recorded as pending as the devices do."""
+        written = self._command("target_temperature", target)
+        if written:
+            self.data.set_temp_write = int(target)
+        return written
 
     async def async_set_showing_celsius(self, on: bool) -> bool:
         """Set the toggle for showing Celsius."""

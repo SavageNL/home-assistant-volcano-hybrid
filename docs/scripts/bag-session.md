@@ -11,7 +11,7 @@ A script that runs a whole temperature ladder on its own, one bag per rung:
 
 Pick your Volcano when you set it up (the thermostat entity is named after the device, so it isn't always `climate.volcano_hybrid`). The ladder and the timings are settings too, so the same script runs any ladder (see [Presets](../presets.md#ladders)). If a rung isn't reached within 15 minutes the script turns the Volcano off and stops with an error.
 
-Temperatures are always in °C, even if Home Assistant shows °F: the script converts them for you. A rung counts as reached within 1 °C, since the Volcano often settles a degree under its target.
+Temperatures are always in °C, even if Home Assistant shows °F: the script converts them for you.
 
 List the temperatures low to high: a rung the chamber is already above is treated as reached, so stepping down doesn't wait for it to cool.
 
@@ -75,9 +75,6 @@ List the temperatures low to high: a rung the chamber is already above is treate
           # Temperatures here are °C. HA shows climate temperatures in your unit
           # system, so on °F convert (the Volcano's 230 °C max shows as 446 °F).
           fahrenheit: "{{ state_attr(volcano_entity, 'max_temp') | float(0) > 300 }}"
-      - action: climate.turn_on
-        target:
-          entity_id: "{{ volcano_entity }}"
       - repeat:
           for_each: "{{ temperatures | default([179, 185, 191, 199, 205, 211, 217, 230]) }}"
           sequence:
@@ -85,18 +82,13 @@ List the temperatures low to high: a rung the chamber is already above is treate
                 rung: >-
                   {{ ((repeat.item | float * 9 / 5 + 32) | round(1)) if fahrenheit
                   else repeat.item | float }}
-                margin: "{{ 1.8 if fahrenheit else 1 }}"
-            - action: climate.set_temperature
-              data:
-                temperature: "{{ rung }}"
-              target:
-                entity_id: "{{ volcano_entity }}"
-            - alias: Wait for the device to reach the rung
+            - alias: Heat up to the rung
               action: volcano_hybrid.wait_for_temperature
               target:
                 entity_id: "{{ volcano_entity }}"
               data:
-                tolerance: "{{ margin }}"
+                temperature: "{{ rung }}"
+                turn_on: true
               response_variable: heatup
             - if: "{{ not heatup[volcano_entity].reached }}"
               then:

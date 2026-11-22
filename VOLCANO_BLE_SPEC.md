@@ -400,7 +400,9 @@ CONFIRMED (vendor app; this is what the integration's Celsius, display-on-coolin
 vibration switches write, and since they read the register back after every write, a
 device that did not follow this convention would fail the write as unconfirmed rather
 than leave the switch showing the wrong state). An earlier revision of this table had
-the two rows swapped; the code, which predates it, was always as above.
+the two rows swapped; the code, which predates it, was always as above. Confirmed live
+as well: the °C/°F switch, which now reads the register back after writing it,
+changes the display both ways on a Volcano Hybrid.
 
 **PRJSTAT1 does not accept this convention**, and that is a measured result rather than a
 property of the characteristic: `1010000c` advertises write like the other two (§9), and the

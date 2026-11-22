@@ -31,18 +31,13 @@ If the target isn't reached within 15 minutes, it turns the Volcano off and stop
     mode: single
     variables:
       volcano_entity: climate.volcano_hybrid
-      # The Volcano often settles a degree under its target.
-      margin: "{{ 1.8 if state_attr(volcano_entity, 'max_temp') | float(0) > 300 else 1 }}"
     sequence:
-      - action: climate.turn_on
-        target:
-          entity_id: "{{ volcano_entity }}"
-      - alias: Wait for heatup
+      - alias: Heat up
         action: volcano_hybrid.wait_for_temperature
         target:
           entity_id: "{{ volcano_entity }}"
         data:
-          tolerance: "{{ margin }}"
+          turn_on: true
         response_variable: heatup
       - if: "{{ not heatup[volcano_entity].reached }}"
         then:

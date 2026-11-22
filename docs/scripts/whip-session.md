@@ -57,9 +57,6 @@ The same ladder for whip use: instead of filling bags it holds each temperature 
           # Temperatures here are °C. HA shows climate temperatures in your unit
           # system, so on °F convert (the Volcano's 230 °C max shows as 446 °F).
           fahrenheit: "{{ state_attr(volcano_entity, 'max_temp') | float(0) > 300 }}"
-      - action: climate.turn_on
-        target:
-          entity_id: "{{ volcano_entity }}"
       - repeat:
           for_each: "{{ temperatures | default([179, 185, 191, 199, 205, 211, 217, 230]) }}"
           sequence:
@@ -67,18 +64,13 @@ The same ladder for whip use: instead of filling bags it holds each temperature 
                 rung: >-
                   {{ ((repeat.item | float * 9 / 5 + 32) | round(1)) if fahrenheit
                   else repeat.item | float }}
-                margin: "{{ 1.8 if fahrenheit else 1 }}"
-            - action: climate.set_temperature
-              data:
-                temperature: "{{ rung }}"
-              target:
-                entity_id: "{{ volcano_entity }}"
-            - alias: Wait for the device to reach the rung
+            - alias: Heat up to the rung
               action: volcano_hybrid.wait_for_temperature
               target:
                 entity_id: "{{ volcano_entity }}"
               data:
-                tolerance: "{{ margin }}"
+                temperature: "{{ rung }}"
+                turn_on: true
               response_variable: heatup
             - if: "{{ not heatup[volcano_entity].reached }}"
               then:

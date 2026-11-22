@@ -19,9 +19,14 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 
 - A **Wait for temperature** action (`volcano_hybrid.wait_for_temperature`)
   that waits until the device has heated up to its target. Unlike a template
-  wait it ends straight away when the device disconnects, the heater is
-  switched off or the target is changed, rather than sitting out its timeout.
-  The script blueprints use it; re-import them to pick it up. See the
+  wait it gives up early, rather than sitting out its timeout, when the target
+  is changed, the heater stays off for 15 seconds or the device stays
+  disconnected for 30; a heater that reads off for a moment or a connection
+  that drops briefly does not end it. With `turn_on` it switches the heater
+  on first, and with `temperature` it sets the target first too, so heating
+  up to a temperature is one step.
+  The script blueprints use it, and now wait for the target itself instead of
+  stopping 1 °C short of it; re-import them to pick it up. See the
   [Actions](https://savagenl.github.io/home-assistant-volcano-hybrid/actions/)
   page.
 - Crafty / Crafty+: a **Charging** binary sensor (#109). The vendor app has no

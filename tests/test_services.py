@@ -4,22 +4,39 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import pytest
 from homeassistant.const import ATTR_ENTITY_ID
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 
 from custom_components.volcano_hybrid.const import DOMAIN
+from custom_components.volcano_hybrid.coordinator import (
+    WAIT_DISCONNECTED,
+    WAIT_GRACE,
+    WAIT_HEATER_OFF,
+)
 from custom_components.volcano_hybrid.services import SERVICE_WAIT_FOR_TEMPERATURE
 
 from . import FakeVolcanoBLE, get_entity_id
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
 
     from homeassistant.core import HomeAssistant
     from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+
+# A grace period long enough to see a blip come and go, short enough to wait out.
+GRACE = 0.2
+
+
+@pytest.fixture
+def short_grace() -> Generator[None]:
+    """Shorten the grace periods so a test can outlast them."""
+    with patch.dict(WAIT_GRACE, {WAIT_HEATER_OFF: GRACE, WAIT_DISCONNECTED: GRACE}):
+        yield
 
 
 async def _heating(hass: HomeAssistant, fake: FakeVolcanoBLE, current: int) -> str:
@@ -61,8 +78,8 @@ async def test_reached_already(
     init_integration: MockConfigEntry,
     mock_volcano: FakeVolcanoBLE,
 ) -> None:
-    """A device already at its target, less the tolerance, is reached at once."""
-    entity_id = await _heating(hass, mock_volcano, current=189)
+    """A device already at its target is reached at once."""
+    entity_id = await _heating(hass, mock_volcano, current=190)
 
     assert await _wait(hass, entity_id) == {"reached": True, "reason": None}
     # Without a response, success is just a call that returns.
@@ -118,10 +135,11 @@ async def test_ends_early_when_the_target_cannot_be_reached(
     hass: HomeAssistant,
     init_integration: MockConfigEntry,
     mock_volcano: FakeVolcanoBLE,
+    short_grace: None,
     change: Callable[[FakeVolcanoBLE], None],
     reason: str,
 ) -> None:
-    """The wait ends straight away instead of sitting out its timeout."""
+    """The wait ends after the grace period instead of sitting out its timeout."""
     entity_id = await _heating(hass, mock_volcano, current=150)
 
     task = asyncio.ensure_future(_wait(hass, entity_id))
@@ -130,13 +148,102 @@ async def test_ends_early_when_the_target_cannot_be_reached(
 
     change(mock_volcano)
     mock_volcano.data_updated()
-    assert await task == {"reached": False, "reason": reason}
+    # Ended by the grace period running out, with no further update.
+    async with asyncio.timeout(5):
+        assert await task == {"reached": False, "reason": reason}
+
+
+@pytest.mark.parametrize("change", [_disconnect, _heater_off])
+async def test_a_blip_does_not_end_the_wait(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+    short_grace: None,
+    change: Callable[[FakeVolcanoBLE], None],
+) -> None:
+    """
+    A heater or connection that comes straight back keeps the wait going.
+
+    A Volcano switching on often reports its heater off for a second or two,
+    and a connection can drop for a few seconds while the device heats on.
+    """
+    entity_id = await _heating(hass, mock_volcano, current=150)
+    task = asyncio.ensure_future(_wait(hass, entity_id))
+    await _settle()
+
+    change(mock_volcano)
+    mock_volcano.data_updated()
+    await asyncio.sleep(GRACE / 4)
+    assert not task.done()
+    mock_volcano.connected = True
+    mock_volcano.data.heater = True
+    mock_volcano.data_updated()
+
+    # Well past the grace period: the blip was forgotten once it ended.
+    await asyncio.sleep(GRACE * 2)
+    assert not task.done()
+
+    mock_volcano.data.current_temp = 190
+    mock_volcano.data_updated()
+    assert await task == {"reached": True, "reason": None}
+
+
+async def test_turn_on(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """With turn_on, a heater that is off is switched on before waiting."""
+    entity_id = await _heating(hass, mock_volcano, current=150)
+    mock_volcano.data.heater = False
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    task = asyncio.ensure_future(_wait(hass, entity_id, turn_on=True))
+    await _settle()
+    assert ("heater", True) in mock_volcano.commands
+    assert not task.done()
+
+    mock_volcano.data.heater = True
+    mock_volcano.data.current_temp = 190
+    mock_volcano.data_updated()
+    assert await task == {"reached": True, "reason": None}
+
+
+async def test_turn_on_leaves_a_heater_that_is_on_alone(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """A heater that is already on gets no command."""
+    entity_id = await _heating(hass, mock_volcano, current=190)
+
+    assert await _wait(hass, entity_id, turn_on=True) == {
+        "reached": True,
+        "reason": None,
+    }
+    assert ("heater", True) not in mock_volcano.commands
+
+
+async def test_no_tolerance_by_default(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """Without a tolerance, a degree under the target is not reached."""
+    entity_id = await _heating(hass, mock_volcano, current=189)
+
+    assert await _wait(hass, entity_id, timeout=0.01) == {
+        "reached": False,
+        "reason": "timeout",
+    }
 
 
 async def test_failure_raises_without_a_response(
     hass: HomeAssistant,
     init_integration: MockConfigEntry,
     mock_volcano: FakeVolcanoBLE,
+    short_grace: None,
 ) -> None:
     """A caller that does not ask for the response gets a translated error."""
     entity_id = await _heating(hass, mock_volcano, current=150)
@@ -201,3 +308,66 @@ async def test_tolerance_is_in_the_configured_unit(
         "reached": True,
         "reason": None,
     }
+
+
+async def test_temperature_is_set_first(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """With a temperature, the target is set before waiting for it."""
+    entity_id = await _heating(hass, mock_volcano, current=150)
+
+    task = asyncio.ensure_future(_wait(hass, entity_id, temperature=200))
+    await _settle()
+    assert ("target_temperature", 200) in mock_volcano.commands
+    assert not task.done()
+
+    # The fake does not confirm writes on its own; the device would.
+    mock_volcano.data.set_temp = 200
+    mock_volcano.data.current_temp = 200
+    mock_volcano.data_updated()
+    assert await task == {"reached": True, "reason": None}
+
+
+async def test_temperature_in_fahrenheit(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """The temperature is taken in the configured unit, like climate's."""
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    entity_id = await _heating(hass, mock_volcano, current=200)
+
+    # 392 °F is 200 °C, already reached.
+    assert await _wait(hass, entity_id, temperature=392, timeout=0.01) is not None
+    assert ("target_temperature", 200) in mock_volcano.commands
+
+
+@pytest.mark.parametrize("temperature", [39, 231])
+async def test_temperature_out_of_range(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+    temperature: int,
+) -> None:
+    """A target outside the device's range is refused before anything is sent."""
+    entity_id = await _heating(hass, mock_volcano, current=150)
+
+    with pytest.raises(ServiceValidationError) as err:
+        await _wait(hass, entity_id, temperature=temperature, turn_on=True)
+    assert err.value.translation_key == "temperature_out_of_range"
+    assert mock_volcano.commands == []
+
+
+async def test_highest_temperature_in_fahrenheit_is_accepted(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+) -> None:
+    """446 °F, the maximum, converts to a hair over 230 °C and is still allowed."""
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    entity_id = await _heating(hass, mock_volcano, current=230)
+
+    await _wait(hass, entity_id, temperature=446, timeout=0.01)
+    assert ("target_temperature", 230) in mock_volcano.commands
