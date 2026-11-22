@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+from bleak import BleakError
 from habluetooth import get_manager
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
@@ -15,7 +16,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.volcano_hybrid.volcano_ble import UnsupportedCommandError
 
-from . import FakeVolcanoBLE, make_ble_device, make_service_info
+from . import FakeVolcanoBLE, get_entity_id, make_ble_device, make_service_info
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -223,3 +224,37 @@ async def test_unload_cancels_a_connect_in_flight(
 
     assert mock_volcano.disconnect_count > disconnects
     assert not mock_volcano.connected
+
+
+async def test_failed_read_is_update_failed_and_keeps_the_device_available(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_volcano: FakeVolcanoBLE,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A Bluetooth read error is one log line, not an unexpected-error traceback."""
+    coordinator = init_integration.runtime_data
+    mock_volcano.connected = True
+    mock_volcano.data_updated()
+    await hass.async_block_till_done()
+
+    async def failing_update(device: object = None) -> object:
+        msg = "Bluetooth GATT Error address=AA handle=71 error=133 description=Error"
+        raise BleakError(msg)
+
+    mock_volcano.async_manual_update = failing_update  # type: ignore[method-assign,assignment]
+    with patch(_DEVICE_PATCH, return_value=None), patch(_INFO_PATCH, return_value=None):
+        async_fire_time_changed(
+            hass,
+            dt_util.utcnow() + coordinator.update_interval + timedelta(seconds=1),
+        )
+        await hass.async_block_till_done()
+
+    assert "Unexpected error" not in caplog.text
+    assert "Reading from the device failed" in caplog.text
+    assert "error=133" in caplog.text
+    # Still connected, so still available.
+    assert coordinator.last_update_success
+    climate = hass.states.get(get_entity_id(hass, "climate", "volcano"))
+    assert climate is not None
+    assert climate.state != "unavailable"

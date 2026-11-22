@@ -19,8 +19,7 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 
 - Crafty / Crafty+: a **Charging** binary sensor (#109). The vendor app has no
   charging indicator, so this reads a characteristic only older community
-  apps use. It updates within
-  about 10 seconds of plugging in or out.
+  apps use. It updates within about 10 seconds of plugging in or out.
 - Crafty / Crafty+: **Battery health** (full-charge capacity against the
   design capacity), **Charge cycles** and **Discharge cycles** sensors, and
   **Battery voltage** and **Battery current** sensors that are disabled by
@@ -43,6 +42,14 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
   when idle. The old name described the opposite. Your entity ID, history and
   automations are kept; only the displayed name changes, unless you renamed it
   yourself.
+- Volcano Hybrid: **Total heat time** no longer dips by an hour for a moment
+  at each full hour of heating. The device sends the hours and the minutes
+  separately, and between the two the total read an hour low, which Home
+  Assistant's long-term statistics count as the meter being reset.
+- A Bluetooth read that fails during the regular poll (common through an
+  ESPHome Bluetooth proxy) is now logged as one line instead of an
+  "Unexpected error" with a full traceback, and a device that is still
+  connected stays available.
 
 ## [1.1.0] - 2026-10-19
 

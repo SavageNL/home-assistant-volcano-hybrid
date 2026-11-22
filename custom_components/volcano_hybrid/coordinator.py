@@ -18,7 +18,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
 from homeassistant.helpers.event import async_call_later
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
     CONF_AUTO_CONNECT_DELAY,
@@ -195,7 +195,18 @@ class VolcanoHybridCoordinator(DataUpdateCoordinator[DeviceData]):
 
     async def _async_update_data(self) -> DeviceData:
         """Reconnect/refresh on the coordinator interval (a fallback poll)."""
-        await self._async_refresh_device(connect=self.auto_connect)
+        try:
+            await self._async_refresh_device(connect=self.auto_connect)
+        except BleakError as err:
+            # A failed read is routine over a Bluetooth proxy (GATT error 133,
+            # say) and the next poll usually succeeds. As UpdateFailed it is
+            # one log line instead of an "unexpected error" traceback, and
+            # async_update_listeners keeps a still-connected device available.
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="update_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
         return self._device.data
 
     async def _async_refresh_device(self, *, connect: bool) -> None:

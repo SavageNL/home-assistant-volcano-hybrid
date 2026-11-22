@@ -76,8 +76,15 @@ class VolcanoHybridData(DeviceData):
         self.mains_voltage: str | None = None
         self.firmware: str | None = None
         self._current_auto_off_time: float | None = None
-        self.heat_hours_changed: int | None = None
-        self.heat_minutes_changed: int | None = None
+        self._heat_hours: int | None = None
+        self._heat_minutes: int | None = None
+        # The lifetime hours and minutes notify separately, so at every full
+        # hour one arrives before the other (see heat_time).
+        self._hour_carry_pending = False
+        self._minute_wrap_pending = False
+        # The hours as they were when the minutes last changed: a minutes drop
+        # only means a wrap if the hours have not moved since.
+        self._hours_at_last_minutes: int | None = None
         self.shut_off: int | None = None
         self.led_brightness: int | None = None
 
@@ -207,11 +214,64 @@ class VolcanoHybridData(DeviceData):
         return self._fan.needs_write
 
     @property
+    def heat_hours_changed(self) -> int | None:
+        """Lifetime heater hours, as the device last reported them."""
+        return self._heat_hours
+
+    @heat_hours_changed.setter
+    def heat_hours_changed(self, hours: int | None) -> None:
+        previous = self._heat_hours
+        self._heat_hours = hours
+        if self._hour_carry_pending:
+            # The minutes already wrapped; this is the hour that goes with it.
+            self._hour_carry_pending = False
+        elif previous is not None and hours == previous + 1:
+            # The hour ticked first; the minutes' wrap to 0 has yet to arrive.
+            self._minute_wrap_pending = True
+
+    @property
+    def heat_minutes_changed(self) -> int | None:
+        """Lifetime heater minutes past the hour, as last reported."""
+        return self._heat_minutes
+
+    @heat_minutes_changed.setter
+    def heat_minutes_changed(self, minutes: int | None) -> None:
+        previous = self._heat_minutes
+        hours_unchanged = self._hours_at_last_minutes == self._heat_hours
+        self._heat_minutes = minutes
+        self._hours_at_last_minutes = self._heat_hours
+        if self._minute_wrap_pending:
+            self._minute_wrap_pending = False
+        elif (
+            previous is not None
+            and minutes is not None
+            and minutes < previous
+            and hours_unchanged
+        ):
+            # The minutes wrapped first; the hour's increment is on its way.
+            # With the hours already moved on (a reconnect after hours of use
+            # elsewhere), the drop is just the new reading and nothing is due.
+            self._hour_carry_pending = True
+
+    @property
     def heat_time(self) -> int | None:
-        """Get the current auto off time in minutes."""
-        if self.heat_hours_changed is None or self.heat_minutes_changed is None:
+        """
+        Lifetime heating time in minutes.
+
+        `hours * 60 + minutes` (spec §2), corrected for the moment between the
+        two notifications at a full hour. Read naively, a device that sends
+        the minutes' wrap first reports 1458:59 → 1458:00 → 1459:00, and a
+        `total_increasing` sensor that drops is taken for a meter reset.
+        Whichever half arrives first, the other is assumed until it follows.
+        """
+        hours, minutes = self._heat_hours, self._heat_minutes
+        if hours is None or minutes is None:
             return None
-        return self.heat_hours_changed * 60 + self.heat_minutes_changed
+        if self._hour_carry_pending:
+            hours += 1
+        if self._minute_wrap_pending:
+            minutes = 0
+        return hours * 60 + minutes
 
     @property
     def current_auto_off_time(self) -> float | None:

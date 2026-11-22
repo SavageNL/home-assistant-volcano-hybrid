@@ -108,7 +108,7 @@ digit is always `0`.
 | `10110013` | Pump/fan **on** | write 1 byte (`0x01`) | Command characteristic. CONFIRMED |
 | `10110014` | Pump/fan **off** | write 1 byte (`0x00`) | Command characteristic. CONFIRMED |
 | `10110015` | Lifetime heater hours | `uint16`, hours | Read + **notify**. CONFIRMED |
-| `10110016` | Lifetime heater minutes | `uint16`, minutes | Read + **notify**. Combine as `hours * 60 + minutes`. CONFIRMED |
+| `10110016` | Lifetime heater minutes | `uint16`, minutes | Read + **notify**. Combine as `hours * 60 + minutes`. CONFIRMED. At a full hour the two notify separately, and the minutes' wrap to 0 arrives **before** the hours' increment — a naive sum reads 1458:59 → 1458:00 → 1459:00 (STRONG: seen once in a user's recorder, 2026-11-20). The integration assumes the missing half of the rollover until it arrives, in either order |
 
 **On/off are four separate characteristics, not two writable flags.** The action is
 selected by *which* characteristic is written; the payload byte carries no information

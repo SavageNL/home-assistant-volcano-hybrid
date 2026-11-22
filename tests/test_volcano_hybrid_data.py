@@ -97,6 +97,76 @@ def test_heat_time() -> None:
     assert data.heat_time == 150
 
 
+def test_heat_time_minutes_wrap_first() -> None:
+    """The order seen on hardware: the minutes wrap before the hour ticks."""
+    data = FakeVolcanoBLE().data
+    data.heat_hours_changed, data.heat_minutes_changed = 1458, 59
+    assert data.heat_time == 1458 * 60 + 59
+
+    data.heat_minutes_changed = 0
+    assert data.heat_time == 1459 * 60  # not 1458 * 60
+    data.heat_hours_changed = 1459
+    assert data.heat_time == 1459 * 60
+    data.heat_minutes_changed = 1
+    assert data.heat_time == 1459 * 60 + 1
+
+
+def test_heat_time_hour_ticks_first() -> None:
+    """The other order: the hour ticks before the minutes wrap."""
+    data = FakeVolcanoBLE().data
+    data.heat_hours_changed, data.heat_minutes_changed = 1458, 59
+
+    data.heat_hours_changed = 1459
+    assert data.heat_time == 1459 * 60  # not 1459:59, which would then drop
+    data.heat_minutes_changed = 0
+    assert data.heat_time == 1459 * 60
+    data.heat_minutes_changed = 1
+    assert data.heat_time == 1459 * 60 + 1
+
+
+def test_heat_time_after_a_reconnect_hours_later() -> None:
+    """A reading after hours of use elsewhere is taken as it is, in either order."""
+    hours_first = FakeVolcanoBLE().data
+    hours_first.heat_hours_changed, hours_first.heat_minutes_changed = 10, 50
+    hours_first.heat_hours_changed = 12
+    hours_first.heat_minutes_changed = 5
+    assert hours_first.heat_time == 12 * 60 + 5  # not 13:05
+    hours_first.heat_minutes_changed = 6
+    assert hours_first.heat_time == 12 * 60 + 6
+
+    minutes_first = FakeVolcanoBLE().data
+    minutes_first.heat_hours_changed, minutes_first.heat_minutes_changed = 10, 50
+    minutes_first.heat_minutes_changed = 5
+    assert minutes_first.heat_time == 11 * 60 + 5  # provisional, never lower
+    minutes_first.heat_hours_changed = 12
+    assert minutes_first.heat_time == 12 * 60 + 5
+
+
+def test_heat_time_never_drops_across_a_rollover() -> None:
+    """Every published value is at least the previous one, in either order."""
+    for order in ("minutes_first", "hours_first"):
+        data = FakeVolcanoBLE().data
+        data.heat_hours_changed, data.heat_minutes_changed = 10, 0
+        seen = [data.heat_time]
+        for hour in range(10, 13):
+            for minute in range(1, 60):
+                data.heat_minutes_changed = minute
+                seen.append(data.heat_time)
+            steps = (
+                [("m", 0), ("h", hour + 1)]
+                if order == "minutes_first"
+                else [("h", hour + 1), ("m", 0)]
+            )
+            for which, value in steps:
+                if which == "m":
+                    data.heat_minutes_changed = value
+                else:
+                    data.heat_hours_changed = value
+                seen.append(data.heat_time)
+        assert seen == sorted(seen), order
+        assert seen[-1] == 13 * 60
+
+
 def test_on_and_off_time() -> None:
     """The on time is derived from the shut off and auto off time."""
     data = FakeVolcanoBLE().data

@@ -291,6 +291,9 @@
     },
     "not_supported": {
       "message": "The device cannot carry out this command with its family, firmware version or current mode"
+    },
+    "update_failed": {
+      "message": "Reading from the device failed: {error}"
     }
   }
 }
