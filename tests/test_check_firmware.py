@@ -255,3 +255,24 @@ def test_writes_workflow_outputs(
 def test_writing_outputs_is_a_no_op_outside_a_workflow() -> None:
     """Running the script by hand should not need GITHUB_OUTPUT set."""
     check_firmware.write_outputs("ok", "", "")
+
+
+def test_excerpt_fence_cannot_be_closed_by_the_response() -> None:
+    """A response quoting ``` stays inside the code block in the issue body."""
+    raw = "x\n```\n[click](https://example.invalid) @someone\n````\ny"
+    excerpt = check_firmware._excerpt(raw)  # noqa: SLF001
+    fence = excerpt.split("\n", 1)[0]
+    assert fence == "`" * 5
+    assert excerpt == f"{fence}\n{raw}\n{fence}"
+
+
+def test_untrusted_output_is_printed_with_workflow_commands_off(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Workflow commands quoted from a response are not acted on by the runner."""
+    check_firmware._print_untrusted("::add-mask::secret\nbody")  # noqa: SLF001
+    lines = capsys.readouterr().out.splitlines()
+    token = lines[0].removeprefix("::stop-commands::")
+    assert lines[0] != token
+    assert len(token) == 32
+    assert lines[1:] == ["::add-mask::secret", "body", f"::{token}::"]

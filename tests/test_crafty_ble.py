@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from bleak import BleakError
 from bleak_retry_connector import BleakNotFoundError
 
 from custom_components.volcano_hybrid.volcano_ble.crafty import (
@@ -465,3 +466,19 @@ async def test_battery_values_are_optional() -> None:
     assert device.is_connected
     assert device.data.battery_voltage is None
     assert device.data.battery_health is None
+
+
+async def test_failed_writes_are_not_left_pending() -> None:
+    """A write that raised is forgotten instead of being replayed later."""
+    client = FakeBleakClient(crafty_plus_values())
+    device = await connect(client)
+    client.write_gatt_char = AsyncMock(  # type: ignore[method-assign]
+        side_effect=BleakError("write failed")
+    )
+    with pytest.raises(BleakError):
+        await device.async_set_heater(False)
+    with pytest.raises(BleakError):
+        await device.async_set_target_temperature(200)
+    assert device.data.heater_write is None
+    assert device.data.set_temp_write is None
+    assert not device.data.is_assumed

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import contextvars
 import inspect
 import logging
@@ -20,7 +21,7 @@ from .const import FAMILY_MODEL_NAME, DeviceFamily, is_supported
 from .data import DeviceData, VolcanoHybridDataStatusProvider
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Iterator
 
     from habluetooth import BluetoothServiceInfoBleak
 
@@ -40,6 +41,15 @@ CLEAR_CACHE_TIMEOUT = 10
 # loop, say) that inherits the context is only exempt while that attempt runs.
 _CONNECT_ATTEMPT: contextvars.ContextVar[object | None] = contextvars.ContextVar(
     "storz_bickel_connect_attempt", default=None
+)
+
+# Set while a pending write is being replayed. A replayed write was sent once
+# already, so failing again must keep it pending for the next attempt, unlike a
+# fresh command that never went out (see _async_send_pending). A context
+# variable for the same reason as above: the replay can run inside the initial
+# read's gather children, and a user command in another task is not a replay.
+_REPLAYING: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "storz_bickel_replaying", default=False
 )
 
 
@@ -406,6 +416,41 @@ class StorzBickelDevice(VolcanoHybridDataStatusProvider):
             value,
         )
         return True
+
+    @staticmethod
+    async def _async_send_pending(
+        send: Awaitable[bool], discard: Callable[[], None]
+    ) -> bool:
+        """
+        Send a write that is already recorded as pending, forgetting it unsent.
+
+        The pending record exists so a write the device missed is replayed, and
+        it is made before sending because the confirmation can arrive first.
+        A write that never went out — no connection, or the send raised — must
+        not stay recorded: the caller reports the command as failed, and a
+        replay would carry it out anyway the next time the device is on, even
+        hours later and for someone who only switched the fan on at the panel.
+
+        A replay (see `_replaying`) keeps the record when it fails: that write
+        went out before and was reported as done, and retrying it is the point.
+        """
+        sent = False
+        try:
+            sent = await send
+        finally:
+            if not sent and not _REPLAYING.get():
+                discard()
+        return sent
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _replaying() -> Iterator[None]:
+        """Mark the commands sent inside as replays of pending writes."""
+        token = _REPLAYING.set(True)
+        try:
+            yield
+        finally:
+            _REPLAYING.reset(token)
 
     async def _async_confirm(
         self,

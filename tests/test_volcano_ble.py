@@ -952,3 +952,62 @@ async def test_current_temperature_rounds_to_nearest(raw: int, expected: int) ->
         bytearray(raw.to_bytes(2, "little")),
     )
     assert volcano.data.current_temp == expected
+
+
+class FailingWriteClient(FakeBleakClient):
+    """A client whose writes raise, as a link dropping mid-write does."""
+
+    async def write_gatt_char(self, char: FakeCharacteristic, value: bytearray) -> None:
+        """Fail the write."""
+        msg = "write failed"
+        raise BleakError(msg)
+
+
+def _fan_only_values() -> dict[str, bytes]:
+    values = default_values()
+    values[CHARACTERISTIC_PRJ1V] = MASK_PRJSTAT1_VOLCANO_PUMPE_FET_ENABLE.to_bytes(
+        2, "little"
+    )
+    return values
+
+
+@pytest.mark.parametrize(
+    ("command", "pending"),
+    [
+        (lambda v: v.async_set_heater(True), lambda d: d.heater_write),
+        (lambda v: v.async_set_fan(False), lambda d: d.fan_write),
+        (lambda v: v.async_set_target_temperature(200), lambda d: d.set_temp_write),
+    ],
+)
+async def test_failed_write_is_not_left_pending(command: Any, pending: Any) -> None:
+    """A write that raised is forgotten, so it is never replayed later."""
+    volcano, _, _ = await connect(FailingWriteClient(_fan_only_values()))
+
+    with pytest.raises(BleakError):
+        await command(volcano)
+
+    assert pending(volcano.data) is None
+    assert not volcano.data.is_assumed
+
+
+async def test_command_that_failed_unconnected_is_not_replayed_later() -> None:
+    """
+    A command reported as failed is not carried out when the device comes on.
+
+    Regression test: the heater write was recorded as pending before sending
+    and kept when the send failed. The user saw "not connected", yet the next
+    connect to a device someone had switched on at the panel (fan only)
+    replayed it and turned the heater on.
+    """
+    volcano = VolcanoBLE(lambda: None, lambda: None)
+    volcano.device = make_ble_device()
+    with patch(ESTABLISH_CONNECTION, AsyncMock(side_effect=BleakError("away"))):
+        assert not await volcano.async_set_heater(True)
+    assert volcano.data.heater_write is None
+
+    client = FakeBleakClient(_fan_only_values())
+    with patch(ESTABLISH_CONNECTION, AsyncMock(return_value=client)):
+        await volcano.async_manual_update(make_ble_device())
+
+    assert volcano.is_connected
+    assert not any(uuid == CHARACTERISTIC_HEATER_ON for uuid, _ in client.written)

@@ -324,8 +324,13 @@ class CraftyDevice(StorzBickelDevice):
         """Switch the heater; PRJSTAT1 bit 4 confirms."""
         self._require_settings_firmware()
         self.data.heater_write = on
-        written = await self._write_gatt(
-            SERVICE_CONTROL, CHAR_HEATER_ON if on else CHAR_HEATER_OFF, HEATER_PAYLOAD
+        written = await self._async_send_pending(
+            self._write_gatt(
+                SERVICE_CONTROL,
+                CHAR_HEATER_ON if on else CHAR_HEATER_OFF,
+                HEATER_PAYLOAD,
+            ),
+            lambda: self.data.discard_heater_write(on),
         )
         self._after_data_updated()
         return written
@@ -333,8 +338,11 @@ class CraftyDevice(StorzBickelDevice):
     async def async_set_target_temperature(self, target: float) -> bool:
         """Write the target, then re-write the boost as the vendor app does."""
         self.data.set_temp_write = int(target)
-        written = await self._write_gatt(
-            SERVICE_CONTROL, CHAR_TARGET_TEMP, _to_u16(int(target) * 10)
+        written = await self._async_send_pending(
+            self._write_gatt(
+                SERVICE_CONTROL, CHAR_TARGET_TEMP, _to_u16(int(target) * 10)
+            ),
+            lambda: self.data.discard_set_temp_write(int(target)),
         )
         if written and self.data.boost_temp is not None:
             await self._write_gatt(
@@ -448,13 +456,14 @@ class CraftyDevice(StorzBickelDevice):
         ) and not self.data.is_on:
             # Never turn the device on by replaying a command it missed.
             self.data.clear_open_writes()
-        if (
-            self.data.heater_needs_write
-            and (heater := self.data.heater_write) is not None
-        ):
-            await self.async_set_heater(heater)
-        if (
-            self.data.set_temp_needs_write
-            and (target := self.data.set_temp_write) is not None
-        ):
-            await self.async_set_target_temperature(target)
+        with self._replaying():
+            if (
+                self.data.heater_needs_write
+                and (heater := self.data.heater_write) is not None
+            ):
+                await self.async_set_heater(heater)
+            if (
+                self.data.set_temp_needs_write
+                and (target := self.data.set_temp_write) is not None
+            ):
+                await self.async_set_target_temperature(target)

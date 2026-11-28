@@ -11,6 +11,11 @@ on:
     branches:
       - main
 
+# Read-only token: nothing here writes to the repository, and hassfest runs
+# from a moving ref (@master), so it must not hold a write token.
+permissions:
+  contents: read
+
 jobs:
   hassfest: # https://developers.home-assistant.io/blog/2020/04/16/hassfest
     name: Hassfest validation

@@ -20,6 +20,8 @@ from __future__ import annotations
 import ast
 import json
 import os
+import re
+import secrets
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -77,8 +79,32 @@ class CheckError(Exception):
 
 
 def _excerpt(raw: str) -> str:
-    """Quote a response body for an issue, bounded so it stays readable."""
-    return f"```\n{raw[:EXCERPT_CHARS]}\n```"
+    """
+    Quote a response body for an issue, bounded so it stays readable.
+
+    The body comes from outside this repository, so the fence is made longer
+    than any backtick run inside it: a response containing ``` must not be able
+    to close the block and have the rest rendered as the issue's own markdown
+    (links, images, @mentions — which GitHub does not notify inside code).
+    """
+    quoted = raw[:EXCERPT_CHARS]
+    longest = max((len(run) for run in re.findall(r"`+", quoted)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return f"{fence}\n{quoted}\n{fence}"
+
+
+def _print_untrusted(text: str) -> None:
+    """
+    Print text that quotes a response, with workflow commands switched off.
+
+    GitHub acts on `::command::` lines in a step's output, so a response that
+    contains one could otherwise add a log annotation or mask, or change how
+    the rest of the log is processed.
+    """
+    token = secrets.token_hex(16)
+    print(f"::stop-commands::{token}")
+    print(text)
+    print(f"::{token}::")
 
 
 def _schema_change(raw: str, family: str) -> CheckError:
@@ -275,7 +301,7 @@ def main() -> int:
             message = _check_family(family, recorded.get(family))
         except CheckError as failure:
             print(f"::warning::{failure.title}")
-            print(failure.body)
+            _print_untrusted(failure.body)
             failures.append((family, failure))
         else:
             print(message)

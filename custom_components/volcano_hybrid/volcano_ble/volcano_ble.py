@@ -342,10 +342,13 @@ class VolcanoDevice(StorzBickelDevice):
         # Track the write before sending it, so the device notification that
         # confirms it cannot race ahead and leave the write pending forever.
         self.data.fan_write = on
-        written = await self._write_gatt(
-            SERVICE_UUID,
-            CHARACTERISTIC_FAN_ON if on else CHARACTERISTIC_FAN_OFF,
-            bytearray([int(on)]),
+        written = await self._async_send_pending(
+            self._write_gatt(
+                SERVICE_UUID,
+                CHARACTERISTIC_FAN_ON if on else CHARACTERISTIC_FAN_OFF,
+                bytearray([int(on)]),
+            ),
+            lambda: self.data.discard_fan_write(on),
         )
         self._after_data_updated()
         return written
@@ -356,10 +359,13 @@ class VolcanoDevice(StorzBickelDevice):
         # Track the write before sending it, so the device notification that
         # confirms it cannot race ahead and leave the write pending forever.
         self.data.heater_write = on
-        written = await self._write_gatt(
-            SERVICE_UUID,
-            CHARACTERISTIC_HEATER_ON if on else CHARACTERISTIC_HEATER_OFF,
-            bytearray([int(on)]),
+        written = await self._async_send_pending(
+            self._write_gatt(
+                SERVICE_UUID,
+                CHARACTERISTIC_HEATER_ON if on else CHARACTERISTIC_HEATER_OFF,
+                bytearray([int(on)]),
+            ),
+            lambda: self.data.discard_heater_write(on),
         )
         self._after_data_updated()
         return written
@@ -372,10 +378,13 @@ class VolcanoDevice(StorzBickelDevice):
         self.data.set_temp_write = int(target)
         # Written as a uint32 like the vendor app does, though read as a uint16
         # (spec §2).
-        written = await self._write_gatt(
-            SERVICE_UUID,
-            CHARACTERISTIC_SET_TEMP,
-            bytearray(int.to_bytes(int(target * 10), 4, "little")),
+        written = await self._async_send_pending(
+            self._write_gatt(
+                SERVICE_UUID,
+                CHARACTERISTIC_SET_TEMP,
+                bytearray(int.to_bytes(int(target * 10), 4, "little")),
+            ),
+            lambda: self.data.discard_set_temp_write(int(target)),
         )
         if written:
             await self._async_read_set_temp()
@@ -485,20 +494,24 @@ class VolcanoDevice(StorzBickelDevice):
             # We don't want to turn on the device after dropping commands
             self.data.clear_open_writes()
 
-        if self.data.fan_needs_write and (fan_write := self.data.fan_write) is not None:
-            await self.async_set_fan(fan_write)
+        with self._replaying():
+            if (
+                self.data.fan_needs_write
+                and (fan_write := self.data.fan_write) is not None
+            ):
+                await self.async_set_fan(fan_write)
 
-        if (
-            self.data.heater_needs_write
-            and (heater_write := self.data.heater_write) is not None
-        ):
-            await self.async_set_heater(heater_write)
+            if (
+                self.data.heater_needs_write
+                and (heater_write := self.data.heater_write) is not None
+            ):
+                await self.async_set_heater(heater_write)
 
-        if (
-            self.data.set_temp_needs_write
-            and (set_temp_write := self.data.set_temp_write) is not None
-        ):
-            await self.async_set_target_temperature(set_temp_write)
+            if (
+                self.data.set_temp_needs_write
+                and (set_temp_write := self.data.set_temp_write) is not None
+            ):
+                await self.async_set_target_temperature(set_temp_write)
 
 
 # The old name stays importable for one release, until every caller has moved

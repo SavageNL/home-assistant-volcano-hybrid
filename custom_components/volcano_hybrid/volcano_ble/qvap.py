@@ -258,11 +258,10 @@ class QvapDevice(StorzBickelDevice):
         """Switch between off and normal heating; the reply confirms."""
         self._require_application()
         self.data.heater_write = on
-        try:
-            written = await self._async_write_frame(f.build_heater_write(on))
-        except UnsupportedCommandError:
-            self.data.heater_write = None
-            raise
+        written = await self._async_send_pending(
+            self._async_write_frame(f.build_heater_write(on)),
+            lambda: self.data.discard_heater_write(on),
+        )
         self._after_data_updated()
         return written
 
@@ -270,11 +269,10 @@ class QvapDevice(StorzBickelDevice):
         """Set the base target temperature."""
         self._require_application()
         self.data.set_temp_write = int(target)
-        try:
-            written = await self._async_write_frame(f.build_target_write(int(target)))
-        except UnsupportedCommandError:
-            self.data.set_temp_write = None
-            raise
+        written = await self._async_send_pending(
+            self._async_write_frame(f.build_target_write(int(target))),
+            lambda: self.data.discard_set_temp_write(int(target)),
+        )
         self._after_data_updated()
         return written
 
@@ -360,13 +358,17 @@ class QvapDevice(StorzBickelDevice):
         ) and not self.data.is_on:
             # Never turn the device on by replaying a command it missed.
             self.data.clear_open_writes()
-        if self.data.heater_needs_write and (on := self.data.heater_write) is not None:
-            await self.async_set_heater(on)
-        if (
-            self.data.set_temp_needs_write
-            and (target := self.data.set_temp_write) is not None
-        ):
-            await self.async_set_target_temperature(target)
+        with self._replaying():
+            if (
+                self.data.heater_needs_write
+                and (on := self.data.heater_write) is not None
+            ):
+                await self.async_set_heater(on)
+            if (
+                self.data.set_temp_needs_write
+                and (target := self.data.set_temp_write) is not None
+            ):
+                await self.async_set_target_temperature(target)
 
 
 class VentyDevice(QvapDevice):

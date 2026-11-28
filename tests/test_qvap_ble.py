@@ -605,3 +605,16 @@ async def test_link_drop_during_the_init_sequence_does_not_deadlock() -> None:
             await device.async_manual_update(ble_device)
     assert device.is_connected
     assert device.client is second
+
+
+async def test_failed_heater_write_is_not_left_pending() -> None:
+    """A write that raised is forgotten instead of being replayed later."""
+    device, simulated = await connect()
+    simulated.fail.add(f.CMD_STATUS)
+    with pytest.raises(BleakError):
+        await device.async_set_heater(False)
+    with pytest.raises(BleakError):
+        await device.async_set_target_temperature(200)
+    assert device.data.heater_write is None
+    assert device.data.set_temp_write is None
+    assert not device.data.is_assumed

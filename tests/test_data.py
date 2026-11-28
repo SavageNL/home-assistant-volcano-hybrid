@@ -57,3 +57,18 @@ def test_base_data_defaults() -> None:
     assert data.is_heating is None
     assert not data.is_assumed
     assert "at_temperature" in data.capabilities
+
+
+def test_tracked_value_discard_only_drops_its_own_write() -> None:
+    """Forgetting an unsent write keeps a newer one recorded meanwhile."""
+    tracked: TrackedValue[bool] = TrackedValue()
+    tracked.value = False
+    tracked.pending = True
+    tracked.discard(True)
+    assert tracked.pending is None
+
+    # "On" failed, but "off" was issued while it was failing; "off" stays.
+    tracked.value = True
+    tracked.pending = False
+    tracked.discard(True)
+    assert tracked.pending is False

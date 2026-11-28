@@ -23,10 +23,15 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref_name }}
 
+      # Every value below reaches the scripts through env rather than ${{ }}
+      # interpolation: interpolated text becomes part of the script itself, so
+      # a tag name (or dispatch input) containing $(...) would run as code.
       - name: Resolve version from tag
         id: version
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          tag="$TAG"
           version="${tag#v}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -37,10 +42,12 @@ jobs:
           fi
 
       - name: Stamp version into manifest and build zip
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           manifest="custom_components/volcano_hybrid/manifest.json"
           tmp="$(mktemp)"
-          jq --arg v "${{ steps.version.outputs.version }}" '.version = $v' "$manifest" > "$tmp"
+          jq --arg v "$VERSION" '.version = $v' "$manifest" > "$tmp"
           mv "$tmp" "$manifest"
           cd custom_components/volcano_hybrid
           zip -r "$GITHUB_WORKSPACE/volcano_hybrid.zip" . -x '*__pycache__*' '*.pyc'
@@ -68,16 +75,22 @@ jobs:
       - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTES_FILE: ${{ steps.notes.outputs.file }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
           # A --notes-file body is pre-pended to the generated notes, so the
           # curated entries lead and the commit list follows.
-          notes_args=()
-          if [ -n "${{ steps.notes.outputs.file }}" ]; then
-            notes_args+=(--notes-file "${{ steps.notes.outputs.file }}")
+          extra_args=()
+          if [ -n "$NOTES_FILE" ]; then
+            extra_args+=(--notes-file "$NOTES_FILE")
           fi
-          gh release create "${{ steps.version.outputs.tag }}" \
+          if [ -n "$PRERELEASE" ]; then
+            extra_args+=("$PRERELEASE")
+          fi
+          gh release create "$TAG" \
             "$GITHUB_WORKSPACE/volcano_hybrid.zip" \
-            --title "v${{ steps.version.outputs.version }}" \
+            --title "v$VERSION" \
             --generate-notes \
-            "${notes_args[@]}" \
-            ${{ steps.version.outputs.prerelease }}
+            "${extra_args[@]}"

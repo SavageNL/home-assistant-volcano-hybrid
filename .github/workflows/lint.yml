@@ -8,6 +8,10 @@ on:
     branches:
       - "main"
 
+# Read-only token: this workflow only reads the repository.
+permissions:
+  contents: read
+
 jobs:
   ruff:
     name: "Ruff"

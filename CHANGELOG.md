@@ -48,6 +48,13 @@ This file starts at 1.0.4. Releases up to and including 1.0.3 are only on the
 
 ### Fixed
 
+- A heater, fan or target temperature command that failed (the device was out
+  of reach, or the connection dropped while sending) is no longer carried out
+  later. It used to be remembered and sent the next time the device was on, so
+  a "heater on" that had reported an error could switch the heater on hours
+  later, for example when someone only turned the fan on at the device. While
+  it was remembered, the climate card also showed the failed command as the
+  device's state.
 - With Home Assistant set to °F, stepping the target temperature by one
   degree could do nothing: a 1 °F step is only 0.56 °C and was rounded back
   onto the old target. A step now always moves the target at least one °C in

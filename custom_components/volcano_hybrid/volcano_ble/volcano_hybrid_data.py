@@ -194,6 +194,10 @@ class VolcanoHybridData(DeviceData):
     def fan_write(self, value: bool | None) -> None:
         self._fan.pending = value
 
+    def discard_fan_write(self, value: bool) -> None:
+        """Forget a fan write that was never sent."""
+        self._fan.discard(value)
+
     @property
     def fan_state(self) -> bool | None:
         """Return the fan as it should be shown."""

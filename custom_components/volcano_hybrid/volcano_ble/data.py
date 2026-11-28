@@ -77,6 +77,16 @@ class TrackedValue(Generic[T]):  # noqa: UP046
         """Drop the pending write."""
         self._pending = None
 
+    def discard(self, value: T) -> None:
+        """
+        Drop the pending write if it is still `value`.
+
+        For a write that was never sent. Compared first so that a newer command
+        recorded while this one was failing is kept.
+        """
+        if self._pending == value:
+            self._pending = None
+
 
 class DeviceData:
     """What every family reports: temperatures, the heater, identity."""
@@ -195,6 +205,10 @@ class DeviceData:
     def set_temp_write(self, value: int | None) -> None:
         self._set_temp.pending = value
 
+    def discard_set_temp_write(self, value: int) -> None:
+        """Forget a target write that was never sent."""
+        self._set_temp.discard(value)
+
     @property
     def set_temp_state(self) -> int | None:
         """Return the target as it should be shown."""
@@ -224,6 +238,10 @@ class DeviceData:
     @heater_write.setter
     def heater_write(self, value: bool | None) -> None:
         self._heater.pending = value
+
+    def discard_heater_write(self, value: bool) -> None:
+        """Forget a heater write that was never sent."""
+        self._heater.discard(value)
 
     @property
     def heater_state(self) -> bool | None:
